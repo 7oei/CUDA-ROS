@@ -6,8 +6,8 @@
 
 
 
-extern void cvcallHello(void);
+extern void covariance(std::vector<std::vector<float>> neighbor_points,float matrix[3][3]);
 
-extern void covarianceMatrix(std::vector<std::vector<float>> neighbor_points,float Matrix[3][3]);
+extern void eigen(std::vector<std::vector<float>> neighbor_points,float eigen_vector[3][3],float eigen_value[3]);
 
 #endif

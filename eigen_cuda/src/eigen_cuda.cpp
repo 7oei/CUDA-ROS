@@ -38,14 +38,20 @@ int main(int argc, char **argv)
             // std::cout<<std::endl;
         }
         //関数実行
-        float Matrix[3][3];
+        // float matrix[3][3];
 
-        covarianceMatrix(neighbor_points,Matrix);
+        // covariance(neighbor_points,matrix);
+
+        float eigen_vector[3][3];
+        float eigen_value[3];
+        eigen(neighbor_points,eigen_vector,eigen_value);
         //返り値(共分散行列出力)
-        std::cout<<"result"<<std::endl;
+        std::cout<<"eigen_value"<<std::endl;
+        std::cout<<eigen_value[0]<<" , "<<eigen_value[1]<<" , "<<eigen_value[2]<<std::endl;
+        std::cout<<"eigen_vector"<<std::endl;
         for(int i=0;i<3;i++){
             for(int j=0;j<3;j++){
-                std::cout<<Matrix[i][j]<<" , ";
+                std::cout<<eigen_vector[i][j]<<" , ";
             }
             std::cout<<std::endl;
         }
