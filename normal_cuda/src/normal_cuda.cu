@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "eigen_cuda/eigen_cuda.hpp"
+#include "normal_cuda/normal_cuda.hpp"
 #include <vector>
 
 __device__ int eigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, int iter_max = 100)
@@ -175,12 +175,71 @@ __global__ void eigenGPU(float* neighbor_points,float* eigen_vector,float* eigen
         sxy,syy,syz,
         sxz,syz,szz,
     };
+    //固有値計算
     eigenJacobiMethod(a, eigen_vector, 3);
     eigen_value[0]=a[0];
     eigen_value[1]=a[4];
     eigen_value[2]=a[8];
     
 }
+
+__global__ void normalGPU(float* neighbor_points,float* normal_vecotr,int point_size) {
+    //平均計算
+    float x_average=0,y_average=0,z_average=0;
+    for(int i=0;i<point_size*3;i+=3){
+        x_average+=neighbor_points[i];
+        y_average+=neighbor_points[i+1];
+        z_average+=neighbor_points[i+2];
+    }
+    x_average/=point_size;
+    y_average/=point_size;
+    z_average/=point_size;
+
+    //要素計算
+    float sxx=0,sxy=0,sxz=0,syy=0,syz=0,szz=0;
+    for(int i=0;i<point_size*3;i+=3){
+        sxx+=(neighbor_points[i]-x_average)*(neighbor_points[i]-x_average);
+        syy+=(neighbor_points[i+1]-y_average)*(neighbor_points[i+1]-y_average);
+        szz+=(neighbor_points[i+2]-z_average)*(neighbor_points[i+2]-z_average);
+
+        sxy+=(neighbor_points[i]-x_average)*(neighbor_points[i+1]-y_average);
+        sxz+=(neighbor_points[i]-x_average)*(neighbor_points[i+2]-z_average);
+        syz+=(neighbor_points[i+1]-y_average)*(neighbor_points[i+2]-z_average);
+    }
+    sxx/=point_size;
+    syy/=point_size;
+    szz/=point_size;
+    sxy/=point_size;
+    sxz/=point_size;
+    syz/=point_size;
+    //共分散行列
+    float a[3*3]={
+        sxx,sxy,sxz,
+        sxy,syy,syz,
+        sxz,syz,szz,
+    };
+    //固有値計算
+    float eigen_vector[3 * 3];
+    eigenJacobiMethod(a, eigen_vector, 3);
+    float eigen_value[3];
+    eigen_value[0]=a[0];
+    eigen_value[1]=a[4];
+    eigen_value[2]=a[8];
+
+    int min_eigen_axis=0;
+    float min_eigen_value=eigen_value[0];
+    for(int i=1;i<3;i++){
+        if(eigen_value[i]<min_eigen_value){
+            min_eigen_value=eigen_value[i];
+            min_eigen_axis=i;
+        }
+    }
+    normal_vecotr[0]=eigen_vector[min_eigen_axis*3+0];
+    normal_vecotr[1]=eigen_vector[min_eigen_axis*3+1];
+    normal_vecotr[2]=eigen_vector[min_eigen_axis*3+2];
+    
+}
+
 
 extern void covariance(std::vector<std::vector<float>> neighbor_points,float matrix[3][3]){
     //変数宣言
@@ -268,5 +327,44 @@ extern void eigen(std::vector<std::vector<float>> neighbor_points,float eigen_ve
     cudaFree(d_neighbor_points);
     cudaFree(d_eigen_vector);
     cudaFree(d_eigen_value);
+    
+}
+
+
+extern void normal(std::vector<std::vector<float>> neighbor_points,float normal_vecotr[3]){
+    //変数宣言
+    std::vector<float> h_neighbor_points(neighbor_points.size() * 3);
+    std::vector<float> h_normal_vector(3);
+    float *d_neighbor_points, *d_normal_vecotr;
+
+    //メモリ確保
+    cudaMalloc((void **)&d_neighbor_points, neighbor_points.size() * 3 * sizeof(float));
+    cudaMalloc((void **)&d_normal_vecotr, 3 * sizeof(float));
+
+    //配列化
+    int k=0;
+    for(int i=0;i<neighbor_points.size();i++){
+        for(int j=0;j<3;j++){
+            h_neighbor_points[k]=neighbor_points[i][j];
+            k++;
+        }
+    }
+    
+    //コピー
+    cudaMemcpy(d_neighbor_points, &h_neighbor_points[0], neighbor_points.size() * 3 * sizeof(float), cudaMemcpyHostToDevice);
+
+    normalGPU<<<1, 1>>>(d_neighbor_points,d_normal_vecotr,neighbor_points.size());
+
+    //配列にコピー
+    cudaMemcpy(&h_normal_vector[0], d_normal_vecotr, 3 * sizeof(float), cudaMemcpyDeviceToHost);
+
+    //行列化
+    for(int i=0;i<3;i++){
+        normal_vecotr[i]=h_normal_vector[i];
+    }
+
+    //メモリバラシ
+    cudaFree(d_neighbor_points);
+    cudaFree(d_normal_vecotr);
     
 }
