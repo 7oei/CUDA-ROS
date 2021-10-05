@@ -10,6 +10,9 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
+  sensor_msgs
+  pcl_conversions
+  pcl_ros
 )
 
 ## System dependencies are found with CMake's conventions
@@ -105,6 +108,9 @@ catkin_package(
   CATKIN_DEPENDS
   roscpp
   std_msgs
+  sensor_msgs
+  pcl_conversions
+  pcl_ros
 )
 
 set(NORMAL_CUDA_SRC

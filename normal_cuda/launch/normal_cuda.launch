@@ -1,0 +1,13 @@
+<!-- -
+Copyright (c) Cross Progress. All rights reserved.
+Licensed under the MIT License.
+- -->
+
+<launch>
+  <group ns="normal">
+    <node name="normal_cuda" pkg="normal_cuda" type="normal_cuda" >
+        <param name="axis" value="0"/>
+    </node>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find normal_cuda)/rviz/normal.rviz"/>
+  </group>
+</launch>
