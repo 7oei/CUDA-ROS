@@ -1,3 +1,14 @@
+# CUDA-ROS
+- min_cuda_node
+    - rosにおけるcudaノードの最小構成
+- cv_cuda
+    - OpenCV×ROS×CUDAの環境構成
+- eigen_cuda
+    - 任意の数の点群を入力にして共分散行列を計算
+    - ヤコビ法で固有ベクトル・固有値計算
+- normal_cuda
+    - 第三主成分軸を法線として出力
+    - サンプル点群は指定した軸方向の分布が小さくなるようにランダムで生成
 # 参考
 - CMake設定
     - [ROSをCUDA対応してみる](https://ipx.hatenablog.com/entry/2018/05/21/102659)
