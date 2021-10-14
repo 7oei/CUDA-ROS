@@ -15,7 +15,7 @@
     - スレッド数制限(今回は32ThreadsPerBlock)
         - maxThreadsPerBlock: 512
         - maxThreadsDim: 512, 512, 64
-        - モードによっては1Blockで計算できそう[AzureKinectの解像度]](https://github.com/7oei/Azure_Kinect_ROS_Driver/blob/48c8037285e91f0c08d5a9e9815444c85142cad1/docs/kinect.md)
+        - モードによっては1Blockで計算できそう ([AzureKinectの解像度](https://github.com/7oei/Azure_Kinect_ROS_Driver/blob/48c8037285e91f0c08d5a9e9815444c85142cad1/docs/kinect.md))
 # 参考
 - CMake設定
     - [ROSをCUDA対応してみる](https://ipx.hatenablog.com/entry/2018/05/21/102659)
