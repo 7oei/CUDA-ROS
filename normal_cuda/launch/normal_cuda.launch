@@ -5,7 +5,7 @@ Licensed under the MIT License.
 
 <launch>
   <group ns="normal">
-    <node name="normal_cuda" pkg="normal_cuda" type="normal_cuda" >
+    <node name="normal_cuda" pkg="normal_cuda" type="normal_cuda" output="screen" >
         <param name="axis" value="0"/>
     </node>
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find normal_cuda)/rviz/normal.rviz"/>

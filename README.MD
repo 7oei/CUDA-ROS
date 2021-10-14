@@ -9,6 +9,13 @@
 - normal_cuda
     - 第三主成分軸を法線として出力
     - サンプル点群は指定した軸方向の分布が小さくなるようにランダムで生成
+- normals_cuda
+    - 点群の近傍点をPCLで探索(KDtree)
+    - 各点毎にスレッドで法線計算
+    - スレッド数制限(今回は32ThreadsPerBlock)
+        - maxThreadsPerBlock: 512
+        - maxThreadsDim: 512, 512, 64
+        - モードによっては1Blockで計算できそう[AzureKinectの解像度]](https://github.com/7oei/Azure_Kinect_ROS_Driver/blob/48c8037285e91f0c08d5a9e9815444c85142cad1/docs/kinect.md)
 # 参考
 - CMake設定
     - [ROSをCUDA対応してみる](https://ipx.hatenablog.com/entry/2018/05/21/102659)
@@ -37,3 +44,10 @@
             ```
             rosparam set /normal/normal_cuda/axis 2
             ```
+
+- normals_cuda
+    - launch
+        ```
+        roslaunch azure_kinect_ros_driver rough_terrain_perception.launch
+        roslaunch normals_cuda normals_cuda.launch
+        ```

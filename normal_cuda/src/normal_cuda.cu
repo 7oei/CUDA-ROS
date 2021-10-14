@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "normal_cuda/normal_cuda.hpp"
 #include <vector>
+#include <iostream>
 
 __device__ int eigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, int iter_max = 100)
 {
@@ -218,6 +219,7 @@ __global__ void normalGPU(float* neighbor_points,float* normal_vecotr,int point_
         sxy,syy,syz,
         sxz,syz,szz,
     };
+    // printf("                          %f ,%f ,%f \ncovariance matrix     =   %f ,%f ,%f \n                          %f ,%f ,%f \n\n",sxx,sxy,sxz,sxy,syy,syz,sxz,syz,szz);
     //固有値計算
     float eigen_vector[3 * 3];
     eigenJacobiMethod(a, eigen_vector, 3);
@@ -237,6 +239,8 @@ __global__ void normalGPU(float* neighbor_points,float* normal_vecotr,int point_
     normal_vecotr[0]=eigen_vector[min_eigen_axis*3+0];
     normal_vecotr[1]=eigen_vector[min_eigen_axis*3+1];
     normal_vecotr[2]=eigen_vector[min_eigen_axis*3+2];
+    
+    // printf("normals = %f, %f, %f\n\n\n\n",normal_vecotr[0],normal_vecotr[1],normal_vecotr[2]);
     
 }
 
