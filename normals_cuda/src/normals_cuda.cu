@@ -104,7 +104,7 @@ __device__ int eigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, in
     return cnt;
 } 
 
-__global__ void normalsGPU(float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals) {
+__global__ void normalsGPU(float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures) {
     // printf("normalsGPU");
     //インデックス取得
     unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
@@ -193,16 +193,21 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
 
             int min_eigen_axis=0;
             float min_eigen_value=eigen_value[0];
+            float eigen_sum=0;
             for(int i=1;i<3;i++){//x,y,z
                 if(eigen_value[i]<min_eigen_value){
                     min_eigen_value=eigen_value[i];
                     min_eigen_axis=i;
                 }
+                //正規化用にnorm計算しておく
+                eigen_sum += eigen_value[i];
             }
 
             normals[idx*3+0]=eigen_vector[min_eigen_axis*3+0];
             normals[idx*3+1]=eigen_vector[min_eigen_axis*3+1];
             normals[idx*3+2]=eigen_vector[min_eigen_axis*3+2];
+
+            curvatures[idx]=min_eigen_value/eigen_sum;
 
             // if(idx==output_id){
             //     printf("normals(%d) = %f, %f, %f\n\n\n\n",idx,normals[idx*3+0],normals[idx*3+1],normals[idx*3+2]);
@@ -218,20 +223,22 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
             normals[idx*3+0]=0;
             normals[idx*3+1]=0;
             normals[idx*3+2]=0;
+            curvatures[idx]=0;
         }
     }
     
 }
 
-extern void compute_normals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array){
+extern void compute_normals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array){
     // std::cout<<"3.01"<<std::endl;
     //ホスト1次配列宣言
     std::vector<float> h_points(points_array.size() * 3);
     std::vector<int> h_neighbor_points_indices(neighbor_points_count);
     std::vector<float> h_normals(points_array.size() * 3);
+    std::vector<float> h_curvatures(points_array.size());
     // std::cout<<"3.02"<<std::endl;
     //デバイス1次配列宣言
-    float *d_points,*d_normals;
+    float *d_points,*d_normals,*d_curvatures;
     int *d_neighbor_points_indices,*d_neighbor_start_indices;
     // std::cout<<"3.03"<<std::endl;
     //メモリ確保
@@ -239,6 +246,7 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     cudaMalloc((void **)&d_neighbor_points_indices, neighbor_points_count * sizeof(int));
     cudaMalloc((void **)&d_neighbor_start_indices, points_array.size() * sizeof(int));
     cudaMalloc((void **)&d_normals, points_array.size() * 3 * sizeof(float));
+    cudaMalloc((void **)&d_curvatures, points_array.size() * sizeof(float));
     // std::cout<<"3.04"<<std::endl;
     //1次配列化
     int k=0,l=0;
@@ -265,11 +273,12 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     // std::cout<<"3.07"<<std::endl;
     // std::cout<<"normalsGPUstart"<<std::endl;
     //実行
-    normalsGPU<<<grid,block>>>(d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals);
+    normalsGPU<<<grid,block>>>(d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures);
     // std::cout<<"normalsGPUend"<<std::endl;
     // std::cout<<"3.08"<<std::endl;
     //コピー
     cudaMemcpy(&h_normals[0], d_normals, points_array.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&h_curvatures[0], d_curvatures, points_array.size() * sizeof(float), cudaMemcpyDeviceToHost);
     // std::cout<<"3.09"<<std::endl;
     //2次配列化
     k=0;
@@ -278,6 +287,7 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
             normals_array[i][j]=h_normals[k];
             k++;
         }
+        curvatures_array[i]=h_curvatures[i];
     }
     // std::cout<<"cu_normals : "<<normals_array[0][0]<<","<<normals_array[0][1]<<","<<normals_array[0][2]<<std::endl;
     // std::cout<<"3.10"<<std::endl;
@@ -286,4 +296,5 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     cudaFree(d_neighbor_points_indices);
     cudaFree(d_neighbor_start_indices);
     cudaFree(d_normals);
+    cudaFree(d_curvatures);
 }

@@ -43,6 +43,7 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
     std::vector<std::vector<int>> neighbor_points_indices(remove_NaN_cloud->points.size());
     std::vector<int> neighbor_start_indices(remove_NaN_cloud->points.size());
     std::vector<std::vector<float>> normals_array(remove_NaN_cloud->points.size(), std::vector<float>(3));
+	std::vector<float> curvatures_array(remove_NaN_cloud->points.size());
 	int neighbor_points_count=0;
 	// std::cout<<std::endl;
 	// std::cout<<std::endl;
@@ -80,7 +81,7 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 
     }
 	// std::cout<<"3"<<std::endl;
-    compute_normals(points_array,neighbor_points_indices,neighbor_start_indices,neighbor_points_count,normals_array);
+    compute_normals(points_array,neighbor_points_indices,neighbor_start_indices,neighbor_points_count,normals_array,curvatures_array);
 	// std::cout<<"3.1"<<std::endl;
     for(size_t i=0;i<remove_NaN_cloud->points.size();i++){
 		// if(i==0||i==10||i==20)std::cout<<"output normal ("<<i<<") = "<<normals_array[i][0]<<","<<normals_array[i][1]<<","<<normals_array[i][2]<<std::endl;
@@ -90,7 +91,7 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
         normals->points[i].normal_x = normals_array[i][0];
 		normals->points[i].normal_y = normals_array[i][1];
 		normals->points[i].normal_z = normals_array[i][2];
-		normals->points[i].curvature = 0;
+		normals->points[i].curvature = curvatures_array[i];
 		normals->points[i].intensity = 0;
 		flipNormalTowardsViewpoint(remove_NaN_cloud->points[i], 0.0, 0.0, 0.0, normals->points[i].normal_x, normals->points[i].normal_y, normals->points[i].normal_z);
 

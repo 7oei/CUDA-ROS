@@ -59,13 +59,13 @@ Visualization Manager:
       Display Rate (%): 100
       Enabled: true
       Max Color: 255; 0; 0
-      MinColor: 0; 255; 0
+      MinColor: 6; 40; 251
       Name: NormalDisplay
       Scale: 0.10000000149011612
-      Style: FlatColor
+      Style: CurvatureColor
       Topic: /normals/normals_cloud
       Unreliable: false
-      Use Rainbow: true
+      Use Rainbow: false
       Value: true
   Enabled: true
   Global Options:
@@ -94,7 +94,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0
+      Angle: 0.33499985933303833
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -104,11 +104,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 86.12762451171875
+      Scale: 238.83868408203125
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz)
-      X: 0
-      Y: 0
+      X: 1.5352883338928223
+      Y: 0.43529245257377625
     Saved: ~
 Window Geometry:
   Displays:

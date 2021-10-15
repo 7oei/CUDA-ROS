@@ -7,7 +7,7 @@
 
 // std::vector<int> KdtreeSearch(pcl::PointXYZ searchpoint, double search_radius);
 // void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg);
-extern void compute_normals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array);
+extern void compute_normals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array);
 
 
 #endif
