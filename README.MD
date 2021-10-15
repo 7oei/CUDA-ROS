@@ -25,6 +25,13 @@
     - [ヤコビ(Jacobi)法](http://www.slis.tsukuba.ac.jp/~fujisawa.makoto.fu/cgi-bin/wiki/index.php?%B8%C7%CD%AD%C3%CD/%B8%C7%CD%AD%A5%D9%A5%AF%A5%C8%A5%EB#he7a28c3)
 
 # 実行
+- normals_cuda
+    ![](readme_image/normals_cuda_curvature.gif)
+    - launch
+        ```
+        roslaunch azure_kinect_ros_driver rough_terrain_perception.launch
+        roslaunch normals_cuda normals_cuda.launch
+        ```
 - normal_cuda
     ![](readme_image/normal_cuda.gif)
     - launch
@@ -45,9 +52,21 @@
             rosparam set /normal/normal_cuda/axis 2
             ```
 
-- normals_cuda
-    - launch
-        ```
-        roslaunch azure_kinect_ros_driver rough_terrain_perception.launch
-        roslaunch normals_cuda normals_cuda.launch
-        ```
+# 実行速度
+- 条件
+    - CPU : Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz
+    - GPU : NVIDIA Corporation GP107M [GeForce GTX 1050 Ti Mobile]
+    - CUDA : 11.4
+    - ROS : melodic
+    - 前段VGFのLeafSize : 5cm
+    - 屋内環境
+- フレーム毎の計算時間
+
+    <img src="readme_image/Normals_CUDA_Compute_Time.png" width="960">
+
+- 入力点群サイズに対する計算時間
+
+    <img src="readme_image/Cloud_Size_VS_Compute_Time.png" width="960">
+
+- 結果
+    - 18~500Hz
