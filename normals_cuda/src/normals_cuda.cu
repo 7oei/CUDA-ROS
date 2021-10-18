@@ -203,14 +203,15 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
                 eigen_sum += eigen_value[i];
             }
 
-            normals[idx*3+0]=eigen_vector[min_eigen_axis*3+0];
-            normals[idx*3+1]=eigen_vector[min_eigen_axis*3+1];
-            normals[idx*3+2]=eigen_vector[min_eigen_axis*3+2];
+            normals[idx*3+0]=eigen_vector[min_eigen_axis+0];
+            normals[idx*3+1]=eigen_vector[min_eigen_axis+3];
+            normals[idx*3+2]=eigen_vector[min_eigen_axis+6];
 
             curvatures[idx]=min_eigen_value/eigen_sum;
 
             // if(idx==output_id){
             //     printf("normals(%d) = %f, %f, %f\n\n\n\n",idx,normals[idx*3+0],normals[idx*3+1],normals[idx*3+2]);
+            //     printf("curvature(%d) = %f\n",idx,curvatures[idx]);
             // }
 
             //デバッグ用

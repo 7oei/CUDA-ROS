@@ -67,7 +67,7 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 
 		// std::cout<<"2.2"<<std::endl;
 		/*search neighbor points*/
-		double search_radius = 0.15;
+		double search_radius = 0.30;//0.15
 		std::vector<int> indices = KdtreeSearch(remove_NaN_cloud->points[i], search_radius);
 		// std::cout<<"2.3"<<std::endl;
         neighbor_start_indices[i]=neighbor_points_count;

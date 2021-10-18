@@ -223,6 +223,7 @@ __global__ void normalGPU(float* neighbor_points,float* normal_vecotr,int point_
     //固有値計算
     float eigen_vector[3 * 3];
     eigenJacobiMethod(a, eigen_vector, 3);
+    // printf("                          %f ,%f ,%f \neigen vector          =   %f ,%f ,%f \n                          %f ,%f ,%f \n\n",eigen_vector[0],eigen_vector[1],eigen_vector[2],eigen_vector[3],eigen_vector[4],eigen_vector[5],eigen_vector[6],eigen_vector[7],eigen_vector[8]);
     float eigen_value[3];
     eigen_value[0]=a[0];
     eigen_value[1]=a[4];
@@ -236,12 +237,11 @@ __global__ void normalGPU(float* neighbor_points,float* normal_vecotr,int point_
             min_eigen_axis=i;
         }
     }
-    normal_vecotr[0]=eigen_vector[min_eigen_axis*3+0];
-    normal_vecotr[1]=eigen_vector[min_eigen_axis*3+1];
-    normal_vecotr[2]=eigen_vector[min_eigen_axis*3+2];
+    normal_vecotr[0]=eigen_vector[min_eigen_axis+0];
+    normal_vecotr[1]=eigen_vector[min_eigen_axis+3];
+    normal_vecotr[2]=eigen_vector[min_eigen_axis+6];
     
     // printf("normals = %f, %f, %f\n\n\n\n",normal_vecotr[0],normal_vecotr[1],normal_vecotr[2]);
-    
 }
 
 
