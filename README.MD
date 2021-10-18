@@ -29,8 +29,8 @@
     ![](readme_image/normals_cuda_curvature.gif)
     - launch
         ```
-        roslaunch azure_kinect_ros_driver rough_terrain_perception.launch
-        roslaunch normals_cuda normals_cuda.launch
+        roslaunch normals_cuda normals_cuda.launch 
+        rosbag play /home/adachi/cross_progress_data/k4a_points.bag
         ```
 - normal_cuda
     ![](readme_image/normal_cuda.gif)
