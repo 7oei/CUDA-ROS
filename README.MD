@@ -59,14 +59,14 @@
     - CUDA : 11.4
     - ROS : melodic
     - 前段VGFのLeafSize : 5cm
+    - KD-tree 探索半径 : 30cm
     - 屋内環境
-- フレーム毎の計算時間
+- CPU VS GPU
 
-    <img src="readme_image/Normals_CUDA_Compute_Time.png" width="960">
-
-- 入力点群サイズに対する計算時間
-
-    <img src="readme_image/Cloud_Size_VS_Compute_Time.png" width="960">
+    <img src="readme_image/CPU_VS_GPU.png" width="1920">
 
 - 結果
     - 18~500Hz
+
+# データセット
+- [AzureKinect室内点群データ](https://drive.google.com/file/d/1mvW2QOywNAWhboZ2EcBBJ2dHjLf1or8D/view?usp=sharing)

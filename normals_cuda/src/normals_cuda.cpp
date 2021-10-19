@@ -14,7 +14,6 @@ ros::Publisher normals_publisher;
 ros::Subscriber cloud_subscriber;
 pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
 
-int frames=0;
 
 std::vector<int> KdtreeSearch(pcl::PointXYZ searchpoint, double search_radius)
 {
@@ -27,6 +26,7 @@ std::vector<int> KdtreeSearch(pcl::PointXYZ searchpoint, double search_radius)
 
 void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 {
+	const auto sensor_ros_time = cloud_msg->header.stamp;
 	// std::cout<<"1"<<std::endl;
 	// Container for original & filtered data
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud {new pcl::PointCloud<pcl::PointXYZ>};
@@ -133,10 +133,9 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 
 	points_update_time = (ros::Time::now().toSec() - section_start);
 	all_compute_time = (ros::Time::now().toSec() - time_start);
-	std::ofstream ofs("/home/adachi/normals_cuda_time.csv",std::ios::app); 
-	ofs << frames << "," << remove_NaN_cloud->points.size() << "," << neighbor_points_size << "," << all_compute_time << "," << kdtree_search_time << "," << compute_normal_time << "," << points_update_time << "," << std::endl;
+	// std::ofstream ofs("/home/adachi/normals_cuda_time.csv",std::ios::app); 
+	// ofs << sensor_ros_time << "," << remove_NaN_cloud->points.size() << "," << neighbor_points_size << "," << all_compute_time << "," << kdtree_search_time << "," << compute_normal_time << "," << points_update_time << "," << std::endl;
 	//time,cloud_points_size,neighbor_points_size,all_compute_time,kdtree_search_time,compute_normal_time,points_update_time
-	frames++;
 	// Convert to ROS data type
 	normals->header.stamp = cloud->header.stamp;
 	normals->header.frame_id = cloud->header.frame_id;
