@@ -104,7 +104,7 @@ __device__ int eigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, in
     return cnt;
 } 
 
-__global__ void normalsGPU(float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures) {
+__global__ void normalsGPU(float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time) {
     // printf("normalsGPU");
     //インデックス取得
     unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
@@ -126,6 +126,10 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
         // if(idx==0||idx==10||idx==20) printf("neighbor(%d) start = %d, end = %d,size = %d\n",idx,neighbor_start_indices[idx],end_indices,neighbor_size);
         // printf("neighbor_size = %d\n", neighbor_size);
         if(neighbor_size>=3){//近傍点数3以上
+            long long int covariance_start, covariance_stop;
+            long long int eigen_start,eigen_stop;
+
+            asm volatile("mov.u64  %0, %globaltimer;" : "=l"(covariance_start));
             // printf("neighbor_size>=3");
             //平均計算
             float x_average=0,y_average=0,z_average=0;
@@ -172,6 +176,11 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
                 sxz,syz,szz,
             };
 
+            asm volatile("mov.u64  %0, %globaltimer;" : "=l"(covariance_stop));
+            covariance_time[idx]=covariance_stop - covariance_start;
+
+            asm volatile("mov.u64  %0, %globaltimer;" : "=l"(eigen_start));
+            
             // __syncthreads();
             // if(idx==output_id){
             //     printf("                          %f ,%f ,%f \ncovariance matrix(%d)=   %f ,%f ,%f \n                          %f ,%f ,%f \n\n",sxx,sxy,sxz,idx,sxy,syy,syz,sxz,syz,szz);
@@ -203,6 +212,9 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
                 eigen_sum += eigen_value[i];
             }
 
+            asm volatile("mov.u64  %0, %globaltimer;" : "=l"(eigen_stop));
+            eigen_time[idx]=eigen_stop - eigen_start;
+
             normals[idx*3+0]=eigen_vector[min_eigen_axis+0];
             normals[idx*3+1]=eigen_vector[min_eigen_axis+3];
             normals[idx*3+2]=eigen_vector[min_eigen_axis+6];
@@ -225,22 +237,27 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
             normals[idx*3+1]=0;
             normals[idx*3+2]=0;
             curvatures[idx]=0;
+            covariance_time[idx]=0;
+            eigen_time[idx]=0;
         }
     }
     
 }
 
-extern void compute_normals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array){
+extern void compute_normals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time){
     // std::cout<<"3.01"<<std::endl;
     //ホスト1次配列宣言
     std::vector<float> h_points(points_array.size() * 3);
     std::vector<int> h_neighbor_points_indices(neighbor_points_count);
     std::vector<float> h_normals(points_array.size() * 3);
     std::vector<float> h_curvatures(points_array.size());
+    std::vector<long long int> h_covariance_compute_time(points_array.size());
+    std::vector<long long int> h_eigen_compute_time(points_array.size());
     // std::cout<<"3.02"<<std::endl;
     //デバイス1次配列宣言
     float *d_points,*d_normals,*d_curvatures;
     int *d_neighbor_points_indices,*d_neighbor_start_indices;
+    long long int *d_covariance_compute_time,*d_eigen_compute_time;
     // std::cout<<"3.03"<<std::endl;
     //メモリ確保
     cudaMalloc((void **)&d_points, points_array.size() * 3 * sizeof(float));
@@ -248,6 +265,8 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     cudaMalloc((void **)&d_neighbor_start_indices, points_array.size() * sizeof(int));
     cudaMalloc((void **)&d_normals, points_array.size() * 3 * sizeof(float));
     cudaMalloc((void **)&d_curvatures, points_array.size() * sizeof(float));
+    cudaMalloc((void **)&d_covariance_compute_time, points_array.size() * sizeof(long long int));
+    cudaMalloc((void **)&d_eigen_compute_time, points_array.size() * sizeof(long long int));
     // std::cout<<"3.04"<<std::endl;
     //1次配列化
     int k=0,l=0;
@@ -274,12 +293,14 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     // std::cout<<"3.07"<<std::endl;
     // std::cout<<"normalsGPUstart"<<std::endl;
     //実行
-    normalsGPU<<<grid,block>>>(d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures);
+    normalsGPU<<<grid,block>>>(d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
     // std::cout<<"normalsGPUend"<<std::endl;
     // std::cout<<"3.08"<<std::endl;
     //コピー
     cudaMemcpy(&h_normals[0], d_normals, points_array.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(&h_curvatures[0], d_curvatures, points_array.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&h_covariance_compute_time[0], d_covariance_compute_time, points_array.size() * sizeof(long long int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&h_eigen_compute_time[0], d_eigen_compute_time, points_array.size() * sizeof(long long int), cudaMemcpyDeviceToHost);
     // std::cout<<"3.09"<<std::endl;
     //2次配列化
     k=0;
@@ -289,6 +310,8 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
             k++;
         }
         curvatures_array[i]=h_curvatures[i];
+        covariance_compute_time[i]=h_covariance_compute_time[i];
+        eigen_compute_time[i]=h_eigen_compute_time[i];
     }
     // std::cout<<"cu_normals : "<<normals_array[0][0]<<","<<normals_array[0][1]<<","<<normals_array[0][2]<<std::endl;
     // std::cout<<"3.10"<<std::endl;
@@ -298,4 +321,6 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     cudaFree(d_neighbor_start_indices);
     cudaFree(d_normals);
     cudaFree(d_curvatures);
+    cudaFree(d_covariance_compute_time);
+    cudaFree(d_eigen_compute_time);
 }
