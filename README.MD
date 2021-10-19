@@ -64,7 +64,9 @@
 - CPU VS GPU
 
     <img src="readme_image/CPU_VS_GPU.png" width="1920">
+- カーネル関数内計算時間内訳
 
+    <img src="readme_image/gpu_detail.png" width="1920">
 - 結果
     - 18~500Hz
 
