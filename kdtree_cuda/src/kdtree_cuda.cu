@@ -45,6 +45,13 @@ struct kdres {
 	int size;
 };
 
+struct malloctest {
+	int dim;
+	struct kdnode *root;
+	struct kdhyperrect *rect;
+	void (*destr)(void*);
+};
+
 #define SQ(x)			((x) * (x))
 
 //device
@@ -147,8 +154,20 @@ static struct kdhyperrect* h_hyperrect_duplicate(const struct kdhyperrect *rect)
 static void h_hyperrect_extend(struct kdhyperrect *rect, const double *pos);
 static double h_hyperrect_dist_sq(struct kdhyperrect *rect, const double *pos);
 
+//host2device
+struct kdtree *h2d_kd_create(int k);
+int h2d_kd_insert3f(struct kdtree *tree, float x, float y, float z, void *data);
+int h2d_kd_insert(struct kdtree *tree, const double *pos, void *data);
+static int h2d_insert_rec(struct kdnode **nptr, const double *pos, void *data, int dir, int dim);
+static struct kdhyperrect* h2d_hyperrect_create(int dim, const double *min, const double *max);
+static void h2d_hyperrect_extend(struct kdhyperrect *rect, const double *pos);
+void h2d_kd_free(struct kdtree *tree);
+void h2d_kd_clear(struct kdtree *tree);
+static void h2d_clear_rec(struct kdnode *node, void (*destr)(void*));
+static void h2d_hyperrect_free(struct kdhyperrect *rect);
 
-//device
+
+//device//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 __device__ struct kdtree *d_kd_create(int k)
 {
 	struct kdtree *tree;
@@ -793,7 +812,7 @@ __device__ static void d_clear_results(struct kdres *rset)
 
 
 
-//host
+//host////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 struct kdtree *h_kd_create(int k)
 {
 	struct kdtree *tree;
@@ -1436,6 +1455,175 @@ static void h_clear_results(struct kdres *rset)
 }
 
 
+//host2device/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+struct kdtree *h2d_kd_create(int k)//
+{
+	// std::cout<<"h2d_kd_create open"<<std::endl;
+	struct kdtree *tree;
+	struct kdtree *d_tree;
+	if(!(tree = (struct kdtree *)malloc(sizeof *tree))) {
+		return 0;
+	}
+	// std::cout<<"cudaMalloc end"<<std::endl;
+	tree->dim = k;
+	tree->root = 0;
+	tree->destr = 0;
+	tree->rect = 0;
+
+	if(cudaSuccess != cudaMalloc((void **)&d_tree, sizeof( *tree))){
+		return 0;
+	}
+	cudaMemcpy(d_tree, tree, sizeof( *d_tree), cudaMemcpyHostToDevice);
+	// std::cout<<"tree seting end"<<std::endl;
+
+	return tree;
+}
+
+int h2d_kd_insert3f(struct kdtree *tree, float x, float y, float z, void *data)//
+{
+	// std::cout<<"h2d_kd_insert3f open"<<std::endl;
+	double buf[3];
+	double *buf_p;
+	cudaMalloc((void **)&buf_p, 3 * sizeof(double));
+	buf[0] = x;
+	buf[1] = y;
+	buf[2] = z;
+	cudaMemcpy(buf_p, &buf[0], 3 * sizeof(double), cudaMemcpyHostToDevice);
+
+	return h2d_kd_insert(tree, buf_p, data);
+}
+
+int h2d_kd_insert(struct kdtree *tree, const double *pos, void *data)
+{
+	// std::cout<<"h2d_kd_insert open"<<std::endl;
+	if (h2d_insert_rec(&tree->root, pos, data, 0, tree->dim)) {
+		return -1;
+	}
+
+	if (tree->rect == 0) {
+		tree->rect = h2d_hyperrect_create(tree->dim, pos, pos);
+	} else {
+		h2d_hyperrect_extend(tree->rect, pos);
+	}
+
+	return 0;
+}
+
+static int h2d_insert_rec(struct kdnode **nptr, const double *pos, void *data, int dir, int dim)
+{
+	std::cout<<"h2d_insert_rec open"<<std::endl;
+	int new_dir;
+	struct kdnode *node;
+	struct kdnode *d_node;
+
+	if(!*nptr) {
+		std::cout<<"if(!*nptr)"<<std::endl;
+		if(!(node = malloc(sizeof *node))) {
+			return -1;
+		}
+		if(!(node->pos = malloc(dim * sizeof *node->pos))) {
+			free(node);
+			return -1;
+		}
+		std::cout<<"cudaMalloc pos end"<<std::endl;
+		memcpy(node->pos, pos, dim * sizeof *node->pos);
+		node->data = data;
+		node->dir = dir;
+		node->left = node->right = 0;
+		*nptr = node;
+		return 0;
+	}
+
+	node = *nptr;
+	new_dir = (node->dir + 1) % dim;
+	if(pos[node->dir] < node->pos[node->dir]) {
+		return h2d_insert_rec(&(*nptr)->left, pos, data, new_dir, dim);
+	}
+	return h2d_insert_rec(&(*nptr)->right, pos, data, new_dir, dim);
+}
+
+static struct kdhyperrect* h2d_hyperrect_create(int dim, const double *min, const double *max)
+{
+	std::cout<<"h2d_hyperrect_create open"<<std::endl;
+	size_t size = dim * sizeof(double);
+	struct kdhyperrect* rect = 0;
+
+	if(cudaSuccess != cudaMalloc((void **)&rect, sizeof( *rect))){
+		return 0;
+	}
+
+	rect->dim = dim;
+	if(cudaSuccess != cudaMalloc((void **)&rect->min, size)){
+		cudaFree(rect);
+		return 0;
+	}
+	if(cudaSuccess != cudaMalloc((void **)&rect->max, size)){
+		cudaFree(rect->min);
+		cudaFree(rect);
+		return 0;
+	}
+	memcpy(rect->min, min, size);
+	memcpy(rect->max, max, size);
+
+	return rect;
+}
+
+static void h2d_hyperrect_extend(struct kdhyperrect *rect, const double *pos)
+{
+	std::cout<<"h2d_hyperrect_extend open"<<std::endl;
+	int i;
+
+	for (i=0; i < rect->dim; i++) {
+		if (pos[i] < rect->min[i]) {
+			rect->min[i] = pos[i];
+		}
+		if (pos[i] > rect->max[i]) {
+			rect->max[i] = pos[i];
+		}
+	}
+}
+
+void h2d_kd_free(struct kdtree *tree)
+{
+	if(tree) {
+		h2d_kd_clear(tree);
+		cudaFree(tree);
+	}
+}
+
+void h2d_kd_clear(struct kdtree *tree)
+{
+	h2d_clear_rec(tree->root, tree->destr);
+	tree->root = 0;
+
+	if (tree->rect) {
+		h2d_hyperrect_free(tree->rect);
+		tree->rect = 0;
+	}
+}
+
+static void h2d_clear_rec(struct kdnode *node, void (*destr)(void*))
+{
+	if(!node) return;
+
+	h2d_clear_rec(node->left, destr);
+	h2d_clear_rec(node->right, destr);
+	
+	if(destr) {
+		destr(node->data);
+	}
+	cudaFree(node->pos);
+	cudaFree(node);
+}
+
+static void h2d_hyperrect_free(struct kdhyperrect *rect)
+{
+	cudaFree(rect->min);
+	cudaFree(rect->max);
+	cudaFree(rect);
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 __device__ unsigned int Rand(unsigned int randx)
 {
     randx = randx*1103515245+12345;
@@ -1553,7 +1741,7 @@ __device__ int eigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, in
     return cnt;
 } 
 
-__global__ void normalsGPU(float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time) {
+__global__ void normalsGPU(/*struct kdtree* tree,*/float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time) {
     // printf("normalsGPU");
     //インデックス取得
     unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
@@ -1721,54 +1909,35 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
 }
 
 extern void compute_normals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time){
-	int i, vcount = 50;
-	void *kd, *set;
-	printf("inserting %d random vectors... ", vcount);
-	kd = h_kd_create(3);
-	printf("kdcreate ok\n");
-	for(i=0; i<vcount; i++) {
-		float x, y, z;
-		/*
-		x = ((float)Rand(idx) / 4294967295.0f) * 10.0 - 5.0;
-		y = ((float)Rand(idx) / 4294967295.0f) * 10.0 - 5.0;
-		z = ((float)Rand(idx) / 4294967295.0f) * 10.0 - 5.0;
-		*/
-		x = (float)i/(float)vcount *10.0 - 5.0;
-		y = (float)i/(float)vcount *10.0 - 5.0;
-		z = (float)i/(float)vcount *10.0 - 5.0;
-		printf("rand ok\n");
-		h_kd_insert3f((struct kdtree *)kd, x, y, z, 0);
-		printf("insert ok\n");
-	}
-	printf("kdset ok\n");
-	set = h_kd_nearest_range3f((struct kdtree *)kd, 0, 0, 0, 1);//tree,pos,radius
-	printf("range query returned %d items\n", h_kd_res_size((struct kdres *)set));
+
+
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//deviceに移植したい
+	// set = h_kd_nearest_range3f((struct kdtree *)kd, 0, 0, 0, 1);//tree,pos,radius
+	// printf("range query returned %d items\n", h_kd_res_size((struct kdres *)set));
 	
-	char *pch;
-	double pos[3], dist;
-	double pt[3] = { 0, 0, 0 };//中心のポイント
+	// char *pch;
+	// double pos[3], dist;
+	// double pt[3] = { 0, 0, 0 };//中心のポイント
 
-	while( !h_kd_res_end( (struct kdres *)set ) ) {
-		/* get the data and position of the current result item */
-		pch = (char*)h_kd_res_item( (struct kdres *)set, pos);
+	// while( !h_kd_res_end( (struct kdres *)set ) ) {
+	// 	/* get the data and position of the current result item */
+	// 	pch = (char*)h_kd_res_item( (struct kdres *)set, pos);
 
-		/* compute the distance of the current result from the pt */
-		dist = sqrt( dist_sq( pt, pos, 3 ) );
+	// 	/* compute the distance of the current result from the pt */
+	// 	dist = sqrt( dist_sq( pt, pos, 3 ) );
 
-		/* print out the retrieved data */
-		printf( "node at (%.3f, %.3f, %.3f) is %.3f away\n", 
-			pos[0], pos[1], pos[2], dist);
-		if(pch!=0) printf( "has data=%c\n", *pch);
-		// 	pos[0], pos[1], pos[2], dist, *pch );
-		// printf( "node at (%.3f, %.3f, %.3f) is %.3f away and has data=%c\n", 
-		// 	pos[0], pos[1], pos[2], dist, *pch );
+	// 	/* print out the retrieved data */
+	// 	printf( "node at (%.3f, %.3f, %.3f) is %.3f away\n", 
+	// 		pos[0], pos[1], pos[2], dist);
+	// 	if(pch!=0) printf( "has data=%c\n", *pch);
 
-		/* go to the next entry */
-		h_kd_res_next((struct kdres *)set);
-	}
+	// 	/* go to the next entry */
+	// 	h_kd_res_next((struct kdres *)set);
+	// }
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	h_kd_res_free((struct kdres *)set);
-	h_kd_free((struct kdtree *)kd);
 
     // std::cout<<"3.01"<<std::endl;
     //ホスト1次配列宣言
@@ -1780,11 +1949,30 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     std::vector<long long int> h_eigen_compute_time(points_array.size());
     // std::cout<<"3.02"<<std::endl;
     //デバイス1次配列宣言
+	// struct kdtree* d_kd;
+	// void* m_test;
+	// m_test->a=0;
+	// m_test->b=1.41421356;
+	// *m_test->c=3.14;
+	// m_test->dim = 3;
+	// m_test->root = 0;
+	// m_test->rect = 0;
+	// m_test->destr = 0;
+
+	// d_kd->dim = 3;
+	// d_kd->root = 0;
+	// d_kd->destr = 0;
+	// d_kd->rect = 0;
+
     float *d_points,*d_normals,*d_curvatures;
     int *d_neighbor_points_indices,*d_neighbor_start_indices;
     long long int *d_covariance_compute_time,*d_eigen_compute_time;
+	void *d_kd;
     // std::cout<<"3.03"<<std::endl;
+	// std::cout<<"sizeof(* m_test) = "<<sizeof((struct kdtree *)*m_test)<<std::endl;
+	// std::cout<<"sizeof(* kd) = "<<sizeof((struct kdtree)* kd)<<std::endl;
     //メモリ確保
+	// cudaMalloc((void **)&d_kd, sizeof(struct kdtree *));
     cudaMalloc((void **)&d_points, points_array.size() * 3 * sizeof(float));
     cudaMalloc((void **)&d_neighbor_points_indices, neighbor_points_count * sizeof(int));
     cudaMalloc((void **)&d_neighbor_start_indices, points_array.size() * sizeof(int));
@@ -1806,7 +1994,29 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
         }
     }
     // std::cout<<"3.05"<<std::endl;
+	int vcount = 50;
+	std::cout<<"inserting "<<vcount<<" random vectors... "<<std::endl;
+	d_kd = h2d_kd_create(3);
+	std::cout<<"h2d_kd_create end"<<std::endl;
+	
+
+	for(int i=0; i<vcount; i++) {
+		float x, y, z;
+		/*
+		x = ((float)Rand(idx) / 4294967295.0f) * 10.0 - 5.0;
+		y = ((float)Rand(idx) / 4294967295.0f) * 10.0 - 5.0;
+		z = ((float)Rand(idx) / 4294967295.0f) * 10.0 - 5.0;
+		*/
+		x = (float)i/(float)vcount *10.0 - 5.0;
+		y = (float)i/(float)vcount *10.0 - 5.0;
+		z = (float)i/(float)vcount *10.0 - 5.0;
+		h2d_kd_insert3f((struct kdtree *)d_kd, x, y, z, 0);
+	}
+
+	h2d_kd_free((struct kdtree *)d_kd);
+	std::cout<<"h2d_kd_free end"<<std::endl;
     //コピー
+	// cudaMemcpy(d_kd, kd, sizeof(struct kdtree*), cudaMemcpyHostToDevice);
     cudaMemcpy(d_points, &h_points[0], points_array.size() * 3 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_neighbor_points_indices, &h_neighbor_points_indices[0], neighbor_points_count * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_neighbor_start_indices, &neighbor_start_indices[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
@@ -1819,7 +2029,7 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     // std::cout<<"normalsGPUstart"<<std::endl;
     cudaDeviceSetLimit(cudaLimitStackSize, 1024*8);
     //実行
-    normalsGPU<<<grid,block>>>(d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
+    normalsGPU<<<grid,block>>>(/*(struct kdtree *)d_kd,*/d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
     // std::cout<<"normalsGPUend"<<std::endl;
     // std::cout<<"3.08"<<std::endl;
     //コピー
@@ -1842,6 +2052,7 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     // std::cout<<"cu_normals : "<<normals_array[0][0]<<","<<normals_array[0][1]<<","<<normals_array[0][2]<<std::endl;
     // std::cout<<"3.10"<<std::endl;
     //メモリ解放
+	// h2d_kd_free((struct kdtree *)d_kd);
     cudaFree(d_points);
     cudaFree(d_neighbor_points_indices);
     cudaFree(d_neighbor_start_indices);
