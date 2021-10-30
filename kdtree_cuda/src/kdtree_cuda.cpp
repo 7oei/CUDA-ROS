@@ -102,7 +102,7 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 	section_start = ros::Time::now().toSec();
 
 	// std::cout<<"3"<<std::endl;
-    compute_normals(points_array,neighbor_points_indices,neighbor_start_indices,neighbor_points_count,normals_array,curvatures_array,covariance_time_array,eigen_time_array);
+    ComputeNormals(points_array,neighbor_points_indices,neighbor_start_indices,neighbor_points_count,normals_array,curvatures_array,covariance_time_array,eigen_time_array);
 
 	compute_normal_time = (ros::Time::now().toSec() - section_start);
 	section_start = ros::Time::now().toSec();

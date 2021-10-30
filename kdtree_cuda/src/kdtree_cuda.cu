@@ -19,8 +19,23 @@ typedef struct
 	float pos[3];
 } point_with_id;
 
+typedef struct
+{
+	int	parent_id;
+	int left_id;
+	int right_id;
+	int axis;
+	bool node_is_right;
+} node;
+
+std::vector <node> nodes;
+
+int root_id=-1;
+
+bool first=true;
+
 //	年齢(昇順)
-int axis_sort(const void * n1, const void * n2)
+int AxisSort(const void * n1, const void * n2)
 {
 	if (((point_with_id *)n1)->pos[sort_axis] > ((point_with_id *)n2)->pos[sort_axis])
 	{
@@ -36,7 +51,133 @@ int axis_sort(const void * n1, const void * n2)
 	}
 }
 
-__device__ int eigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, int iter_max = 100)
+int CreateTree(std::vector<std::vector<float>> points,std::vector<int> group_indices,int parent_id,bool node_is_right){
+	//入力データ初期化
+	int group_size = group_indices.size();
+	// std::cout<<"group_size"<<group_size<<std::endl;
+	point_with_id point_with_ids[group_size];
+	point_with_id axis_point_with_ids[3][group_size];
+	for(sort_axis=0; sort_axis<3; sort_axis++){
+		for(int i=0;i<group_size;i++){
+			point_with_ids[i].id=group_indices[i];
+			point_with_ids[i].pos[0]=points[group_indices[i]][0];
+			point_with_ids[i].pos[1]=points[group_indices[i]][1];
+			point_with_ids[i].pos[2]=points[group_indices[i]][2];
+		}
+	}
+
+	//ソート
+	float max[3],min[3],median[3],length[3];
+	int axis_median_id[3];
+	int median_id;
+	for(sort_axis=0; sort_axis<3; sort_axis++){//x,y,zそれぞれにソート
+		// std::cout<<"sort_axis = "<<sort_axis<<std::endl;
+
+		qsort(point_with_ids, group_size, sizeof(point_with_id), AxisSort);
+		for (int i=0 ; i < group_size ; i++)
+		{
+			axis_point_with_ids[sort_axis][i].id = point_with_ids[i].id;
+			axis_point_with_ids[sort_axis][i].pos[0] = point_with_ids[i].pos[0];
+			axis_point_with_ids[sort_axis][i].pos[1] = point_with_ids[i].pos[1];
+			axis_point_with_ids[sort_axis][i].pos[2] = point_with_ids[i].pos[2];
+			// printf("%d, %f, %f, %f \n", point_with_ids[i].id, point_with_ids[i].pos[0], point_with_ids[i].pos[1], point_with_ids[i].pos[2]);
+		}
+		std::cout<<std::endl;
+		//max,min,median,axis_median_id取得
+		max[sort_axis]=point_with_ids[group_size-1].pos[sort_axis];//minとmaxいらんかも
+		min[sort_axis]=point_with_ids[0].pos[sort_axis];
+		length[sort_axis]=max[sort_axis]-min[sort_axis];
+		median[sort_axis]=point_with_ids[(group_size-1)/2].pos[sort_axis];//偶数なら小さい方(-1)消せば大きい方
+		axis_median_id[sort_axis]=point_with_ids[(group_size-1)/2].id;
+	}
+	// std::cout<<"x_length = "<< length[0] <<", x_median["<<axis_median_id[0]<<"] = "<<median[0]<<std::endl;
+	// std::cout<<"y_length = "<< length[1] <<", y_median["<<axis_median_id[1]<<"] = "<<median[1]<<std::endl;
+	// std::cout<<"z_length = "<< length[2] <<", z_median["<<axis_median_id[2]<<"] = "<<median[2]<<std::endl;
+	std::cout<<std::endl;
+	// for(int i=0;i<group_size;i++){
+	// 	std::cout<<"point_id["<<i<<"] = "<<point_with_ids[i].id<<std::endl;
+	// }
+	
+
+	//中央値id設定、長軸設定
+	if(length[0]>=length[1]&&length[0]>=length[2]){
+		median_id=axis_median_id[0];
+		nodes[median_id].axis=0;
+	}
+	if(length[1]>=length[0]&&length[1]>=length[2]){
+		median_id=axis_median_id[1];
+		nodes[median_id].axis=1;
+	}
+	if(length[2]>=length[0]&&length[2]>=length[1]){
+		median_id=axis_median_id[2];
+		nodes[median_id].axis=2;
+	}
+
+	//node初期化
+	nodes[median_id].left_id=-1;
+	nodes[median_id].right_id=-1;
+
+	//親設定、親の左右設定
+	nodes[median_id].parent_id=parent_id;
+	if(parent_id>=0){//親あり
+		if(!node_is_right) nodes[parent_id].left_id=median_id;
+		if(node_is_right) nodes[parent_id].right_id=median_id;
+	}
+	else{//親なし
+		root_id=median_id;
+	}
+	std::vector<int> right_group(group_size);
+	std::vector<int> left_group(group_size);
+	int right_count=0;
+	int left_count=0;
+	for(int i=0;i<=((group_size-1)/2)-1;i++){//愚直
+		left_group[left_count] = axis_point_with_ids[nodes[median_id].axis][i].id;
+		left_count++;
+	}
+	left_group.resize(left_count);
+	for(int i=((group_size-1)/2)+1;i<group_size;i++){
+		right_group[right_count] = axis_point_with_ids[nodes[median_id].axis][i].id;
+		right_count++;
+	}
+	right_group.resize(right_count);
+	// std::cout<<"median_id"<<median_id<<std::endl;
+	// std::cout<<"parent_id"<<parent_id<<std::endl;
+	// std::cout<<"left_id"<<nodes[median_id].left_id<<std::endl;
+	// std::cout<<"right_id"<<nodes[median_id].right_id<<std::endl;
+	// std::cout<<"axis"<<nodes[median_id].axis<<std::endl;
+
+	//right,left group表示
+	// std::cout<<"left_group is (";
+	// for(int i=0;i<left_group.size();i++){
+	// 	std::cout<<left_group[i]<<",";
+	// }
+	// std::cout<<")"<<std::endl;
+	// std::cout<<"right_group is (";
+	// for(int i=0;i<right_group.size();i++){
+	// 	std::cout<<right_group[i]<<",";
+	// }
+	// std::cout<<")"<<std::endl;
+	// std::cout<<std::endl;
+	// std::cout<<std::endl;
+	// std::cout<<std::endl;
+	// std::cout<<"--------------------------------------------------------------------------------"<<std::endl;
+	bool left=false;
+	bool right=false;
+	if(group_size>1){//子がいる
+		if(left_group.size()>0){//左に子がいる
+			left= CreateTree(points,left_group,median_id,false);
+		}
+		else left=true;
+		if(right_group.size()>0){//右に子がいる
+			right= CreateTree(points,right_group,median_id,true);
+		}
+		else right=true;
+		if(right&&left) return 1;
+	}
+	else return 1;//子がいない
+}
+
+__device__ int EigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, int iter_max = 100)
 {
     float *bim, *bjm;
     float bii, bij, bjj, bji;
@@ -137,7 +278,7 @@ __device__ int eigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, in
     return cnt;
 } 
 
-__global__ void normalsGPU(float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time) {
+__global__ void NormalsGPU(float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time) {
     // printf("normalsGPU");
     //インデックス取得
     unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
@@ -222,7 +363,7 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
 
             //固有値計算
             float eigen_vector[3 * 3];
-            eigenJacobiMethod(a, eigen_vector, 3);
+            EigenJacobiMethod(a, eigen_vector, 3);
 
             // __syncthreads();
             // if(neighbor_size<3){
@@ -278,40 +419,28 @@ __global__ void normalsGPU(float* points,int point_size,int* neighbor_points_ind
     
 }
 
-extern void compute_normals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time){
-	point_with_id point_with_ids[] =
-	{
-		{0,3,1,4},
-		{1,8,3,6},
-		{2,6,2,8},
-		{3,4,3,8},
+extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time){
+	std::vector<std::vector<float>> points = {
+		{6,1,4},
+		{8,3,6},
+		{11,2,8},
+		{4,3,8},
 	};
-
-	float max[3],min[3],median[3],length[3];
-	int median_id[3];
-	for(sort_axis=0; sort_axis<3; sort_axis++){//x,y,zそれぞれにソート
-		std::cout<<"sort_axis = "<<sort_axis<<std::endl;
-
-		qsort(point_with_ids, sizeof(point_with_ids) / sizeof(point_with_ids[0]), sizeof(point_with_id), axis_sort);
-		for (int j=0 ; j < sizeof(point_with_ids) / sizeof(point_with_ids[0]) ; j++)
-		{
-			printf("%d, %f, %f, %f \n", point_with_ids[j].id, point_with_ids[j].pos[0], point_with_ids[j].pos[1], point_with_ids[j].pos[2]);
+	std::vector<int> root_indices={0,1,2,3};
+	nodes.resize(points.size());
+	// std::cout<<"sizeof(root_indices) = "<<sizeof(root_indices)<<std::endl;
+	
+	if(first){
+		int create_end=CreateTree(points,root_indices,-1,false);
+		if(create_end==1){
+			for(int i=0;i<points.size();i++){
+				std::cout<<"node["<<i<<"] axis = "<<nodes[i].axis<<", parent_id = "<<nodes[i].parent_id<<", left_id = "<<nodes[i].left_id<<", right_id = "<<nodes[i].right_id<<std::endl;
+			}
 		}
-		std::cout<<std::endl;
-		//max,min,median,median_id取得
-		max[sort_axis]=point_with_ids[(sizeof(point_with_ids) / sizeof(point_with_ids[0]))-1].pos[sort_axis];//minとmaxいらんかも
-		min[sort_axis]=point_with_ids[0].pos[sort_axis];
-		length[sort_axis]=max[sort_axis]-min[sort_axis];
-		median[sort_axis]=point_with_ids[((sizeof(point_with_ids) / sizeof(point_with_ids[0]))-1)/2].pos[sort_axis];//偶数なら小さい方(-1)消せば大きい方
-		median_id[sort_axis]=point_with_ids[((sizeof(point_with_ids) / sizeof(point_with_ids[0]))-1)/2].id;
-	}
-	std::cout<<"x_length = "<< length[0] <<", x_median["<<median_id[0]<<"] = "<<median[0]<<std::endl;
-	std::cout<<"y_length = "<< length[1] <<", y_median["<<median_id[1]<<"] = "<<median[1]<<std::endl;
-	std::cout<<"z_length = "<< length[2] <<", z_median["<<median_id[2]<<"] = "<<median[2]<<std::endl;
-	std::cout<<std::endl;
-	std::cout<<std::endl;
-	std::cout<<std::endl;
-    // std::cout<<"3.01"<<std::endl;
+		first=false;
+	} 
+	
+	// std::cout<<"3.01"<<std::endl;
     //ホスト1次配列宣言
     std::vector<float> h_points(points_array.size() * 3);
     std::vector<int> h_neighbor_points_indices(neighbor_points_count);
@@ -360,7 +489,7 @@ extern void compute_normals(std::vector<std::vector<float>> points_array,std::ve
     // std::cout<<"normalsGPUstart"<<std::endl;
     cudaDeviceSetLimit(cudaLimitStackSize, 1024*8);
     //実行
-    normalsGPU<<<grid,block>>>(d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
+    NormalsGPU<<<grid,block>>>(d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
     // std::cout<<"normalsGPUend"<<std::endl;
     // std::cout<<"3.08"<<std::endl;
     //コピー
