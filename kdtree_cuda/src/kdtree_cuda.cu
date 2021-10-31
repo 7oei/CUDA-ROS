@@ -400,7 +400,7 @@ __global__ void NormalsGPU(float* test_points,int* d_parent_ids,int* d_left_ids,
     unsigned int output_id=50;
     // printf("idx = %d ,", idx);
 	if(idx==output_id){
-		// std::vector <node> nodes(test_points_size);
+		// node nodes[test_points_size];
 		// std::vector<float> search_point={11,5,0};
 		// std::vector<int> range_indices;
 		// float range_sq = 3*3;
