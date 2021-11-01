@@ -232,63 +232,66 @@ int SearchSubTree(std::vector<int>& range_indices,int root_id,std::vector <node>
 	return 1;
 }
 
-// __device__ void d_PointRangeCheckAndAdd(std::vector<int>& range_indices,int head_id,std::vector<std::vector<float>> points,std::vector<float> search_point,float range_sq)//vecotrなしpowなしpushbackなしで作り直す
-// {
-// 	float dist_sq = pow(points[head_id][0]-search_point[0],2)+pow(points[head_id][1]-search_point[1],2)+pow(points[head_id][2]-search_point[2],2);
-// 	if(dist_sq<range_sq){
-// 		range_indices.push_back(head_id);
-// 	} 
-// }
+__device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indices,int head_id,float* points,float* search_point,float range_sq)//vecotrなしpowなしpushbackなしで作り直す
+{
+	float dist_sq = powf(points[head_id*3+0]-search_point[0],2)+powf(points[head_id*3+1]-search_point[1],2)+powf(points[head_id*3+2]-search_point[2],2);
+	if(dist_sq<range_sq){
+		// printf("device inside");
+		range_indices[*range_indices_size] = head_id;
+		*range_indices_size+=1;
+	} 
+}
 
-// __device__ int d_SearchSubTree(std::vector<int>& range_indices,int root_id,std::vector <node> nodes,std::vector<std::vector<float>> points,std::vector<float> search_point,float range_sq)//vecotrなしpowなしで作り直す
-// {
-// 	int head_id = root_id;
-// 	bool cross,next_is_right;
-// 	//潜り
-// 	while(1){
-// 		if(search_point[nodes[head_id].axis]>points[head_id][nodes[head_id].axis]) next_is_right = true;
-// 		else next_is_right = false;
+__device__ int d_SearchSubTree(int *range_indices_size,int *range_indices,int root_id,node* nodes,float* points,float* search_point,float range_sq)//vecotrなしpowなしで作り直す
+{
+	int head_id = root_id;
+	bool cross,next_is_right;
+	//潜り
+	while(1){
+		if(search_point[nodes[head_id].axis]>points[head_id*3+nodes[head_id].axis]) next_is_right = true;
+		else next_is_right = false;
 
-// 		if(nodes[head_id].right_id>=0&&nodes[head_id].left_id<0) head_id = nodes[head_id].right_id;//一人っ子
-// 		else if(nodes[head_id].left_id>=0&&nodes[head_id].right_id<0) head_id = nodes[head_id].left_id;//一人っ子
-// 		else if(nodes[head_id].left_id>=0&&nodes[head_id].right_id>=0){//双子
-// 			if(next_is_right){//right
-// 				head_id = nodes[head_id].right_id;
-// 			}
-// 			else{//left
-// 				head_id = nodes[head_id].left_id;
-// 			}
-// 		}
-// 		else break;
-// 	}
-// 	//rootが底
-// 	if(head_id==root_id) {
-// 		d_PointRangeCheckAndAdd(range_indices,head_id,points,search_point,range_sq);
-// 		return 1;
-// 	}
-// 	//昇り
-// 	int last_id;
-// 	while(1){
-// 		cross = false;
-// 		d_PointRangeCheckAndAdd(range_indices,head_id,points,search_point,range_sq);
-// 		//昇る
-// 		last_id = head_id;
-// 		head_id = nodes[head_id].parent_id;
-// 		//交差判定　1軸のみ低効率
-// 		float axis_diff_sq = pow(points[head_id][nodes[head_id].axis] - search_point[nodes[head_id].axis],2);
-// 		if(axis_diff_sq < range_sq) cross = true;
-// 		int sub_tree=0;
-// 		if(cross){
-// 			if(last_id==nodes[head_id].right_id&&nodes[head_id].left_id>0) sub_tree = d_SearchSubTree(range_indices,nodes[head_id].left_id,nodes,points,search_point,range_sq);//右から上がってきた
-// 			if(last_id==nodes[head_id].left_id&&nodes[head_id].right_id>0) sub_tree = d_SearchSubTree(range_indices,nodes[head_id].right_id,nodes,points,search_point,range_sq);//左から上がってきた
-// 		}
-// 		if(head_id==root_id){
-// 			d_PointRangeCheckAndAdd(range_indices,head_id,points,search_point,range_sq);
-// 			break;
-// 		}
-// 	}
-// 	return 1;
-// }
+		if(nodes[head_id].right_id>=0&&nodes[head_id].left_id<0) head_id = nodes[head_id].right_id;//一人っ子
+		else if(nodes[head_id].left_id>=0&&nodes[head_id].right_id<0) head_id = nodes[head_id].left_id;//一人っ子
+		else if(nodes[head_id].left_id>=0&&nodes[head_id].right_id>=0){//双子
+			if(next_is_right){//right
+				head_id = nodes[head_id].right_id;
+			}
+			else{//left
+				head_id = nodes[head_id].left_id;
+			}
+		}
+		else break;
+	}
+	//rootが底
+	if(head_id==root_id) {
+		d_PointRangeCheckAndAdd(range_indices_size,range_indices,head_id,points,search_point,range_sq);
+		return 1;
+	}
+	//昇り
+	int last_id;
+	while(1){
+		cross = false;
+		d_PointRangeCheckAndAdd(range_indices_size,range_indices,head_id,points,search_point,range_sq);
+		//昇る
+		last_id = head_id;
+		head_id = nodes[head_id].parent_id;
+		//交差判定　1軸のみ低効率
+		float axis_diff_sq = powf(points[head_id*3+nodes[head_id].axis] - search_point[nodes[head_id].axis],2);
+		if(axis_diff_sq < range_sq) cross = true;
+		int sub_tree=0;
+		if(cross){
+			if(last_id==nodes[head_id].right_id&&nodes[head_id].left_id>0) sub_tree = d_SearchSubTree(range_indices_size,range_indices,nodes[head_id].left_id,nodes,points,search_point,range_sq);//右から上がってきた
+			if(last_id==nodes[head_id].left_id&&nodes[head_id].right_id>0) sub_tree = d_SearchSubTree(range_indices_size,range_indices,nodes[head_id].right_id,nodes,points,search_point,range_sq);//左から上がってきた
+		}
+		if(head_id==root_id){
+			d_PointRangeCheckAndAdd(range_indices_size,range_indices,head_id,points,search_point,range_sq);
+			break;
+		}
+	}
+
+	return 1;
+}
 
 __device__ int EigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, int iter_max = 100)
 {
@@ -414,7 +417,36 @@ __global__ void NormalsGPU(float* test_points,int* d_parent_ids,int* d_left_ids,
 		// 	}
 		// 	printf("]\n");
 		// }
+
+		/////////////////
+
+		node *nodes = (node*)malloc(sizeof(node) * test_points_size);
+
+		for(int i=0;i<test_points_size;i++){
+			nodes[i].parent_id=d_parent_ids[i];
+			nodes[i].left_id=d_left_ids[i];
+			nodes[i].right_id=d_right_ids[i];
+			nodes[i].axis=d_axes[i];
+		}
+		float search_point[3]={8,1,0};
+		int range_indices_size = 0;
+		int *range_indices = (int*)malloc(sizeof(int) * range_indices_size);
+		float range_sq = 8.5*8.5;
+		//探索関数の実行
+		int range_search = d_SearchSubTree(&range_indices_size,range_indices,root_id,nodes,test_points,search_point,range_sq);//nodes,test_points
+		// std::cout<<"range_indices.size()"<<range_indices.size()<<std::endl;
+		if(range_search==1) {
+			// printf("device range_indices size is =%d",range_indices_size);
+			printf("device range_indices is [");
+			for(int i=0;i<range_indices_size;i++){
+				printf("%d,",range_indices[i]);
+			}
+			printf("]\n");
+		}
+		
+		free (nodes);
 	}
+
 
     if(idx<point_size-1){//対象スレッド内のみ計算
         //デバッグ用
@@ -548,7 +580,8 @@ __global__ void NormalsGPU(float* test_points,int* d_parent_ids,int* d_left_ids,
     
 }
 
-extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time){
+extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
+{
 	std::vector<std::vector<float>> points = {
 		{1,7,0},
 		{2,5,0},
@@ -577,10 +610,10 @@ extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vec
 	// 	}
 	// } 
 
-	// std::vector<float> search_point={8,1,0};
-	std::vector<float> search_point={11,5,0};
+	std::vector<float> search_point={8,1,0};
+	// std::vector<float> search_point={11,5,0};
 	std::vector<int> range_indices;
-	float range_sq = 3*3;
+	float range_sq = 8.5*8.5;
 	//探索関数の実行
 	int range_search = SearchSubTree(range_indices,root_id,nodes,points,search_point,range_sq);
 	// std::cout<<"range_indices.size()"<<range_indices.size()<<std::endl;
