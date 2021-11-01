@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include "kdtree_cuda/kdtree_cuda.hpp"
 #include <vector>
+#include <iterator>
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,7 +33,7 @@ typedef struct
 bool first=true;
 
 //	年齢(昇順)
-int AxisSort(const void * n1, const void * n2)
+__host__ int AxisSort(const void * n1, const void * n2)
 {
 	if (((point_with_id *)n1)->pos[sort_axis] > ((point_with_id *)n2)->pos[sort_axis])
 	{
@@ -48,13 +49,14 @@ int AxisSort(const void * n1, const void * n2)
 	}
 }
 
-int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<float>> points,std::vector<int> group_indices,int parent_id,bool node_is_right)
+__host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<float>> points,std::vector<int> group_indices,int parent_id,bool node_is_right)
 {
 	//入力データ初期化
 	int group_size = group_indices.size();
 	// std::cout<<"group_size"<<group_size<<std::endl;
 	point_with_id point_with_ids[group_size];
-	point_with_id axis_point_with_ids[3][group_size];
+	std::vector<std::vector<int>> axis_sort_ids(group_size, std::vector<int>(3));
+
 	for(sort_axis=0; sort_axis<3; sort_axis++){
 		for(int i=0;i<group_size;i++){/////////////////////////////////////////////////////////////////////////////////////////////////3*points
 			point_with_ids[i].id=group_indices[i];
@@ -72,10 +74,7 @@ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<f
 		// std::cout<<"sort_axis = "<<sort_axis<<std::endl;
 		qsort(point_with_ids, group_size, sizeof(point_with_id), AxisSort);
 		for (int i=0 ; i < group_size ; i++){///////////////////////////////////////////////////////////////////////////////////////////3*points
-			axis_point_with_ids[sort_axis][i].id = point_with_ids[i].id;
-			axis_point_with_ids[sort_axis][i].pos[0] = point_with_ids[i].pos[0];
-			axis_point_with_ids[sort_axis][i].pos[1] = point_with_ids[i].pos[1];
-			axis_point_with_ids[sort_axis][i].pos[2] = point_with_ids[i].pos[2];
+			axis_sort_ids[i][sort_axis]=point_with_ids[i].id;
 			// printf("%d, %f, %f, %f \n", point_with_ids[i].id, point_with_ids[i].pos[0], point_with_ids[i].pos[1], point_with_ids[i].pos[2]);
 		}
 		// std::cout<<std::endl;
@@ -86,6 +85,7 @@ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<f
 		median[sort_axis]=point_with_ids[(group_size-1)/2].pos[sort_axis];//偶数なら小さい方(-1)消せば大きい方
 		axis_median_id[sort_axis]=point_with_ids[(group_size-1)/2].id;
 	}
+
 	// std::cout<<"x_length = "<< length[0] <<", x_median["<<axis_median_id[0]<<"] = "<<median[0]<<std::endl;
 	// std::cout<<"y_length = "<< length[1] <<", y_median["<<axis_median_id[1]<<"] = "<<median[1]<<std::endl;
 	// std::cout<<"z_length = "<< length[2] <<", z_median["<<axis_median_id[2]<<"] = "<<median[2]<<std::endl;
@@ -109,6 +109,10 @@ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<f
 		nodes[median_id].axis=2;
 	}
 
+	for(int i=0;i<group_size;i++){/////////////////////////////////////////////////////////////////////////////////////////////////points
+		group_indices[i]=axis_sort_ids[i][nodes[median_id].axis];
+	}
+
 	//node初期化
 	nodes[median_id].left_id=-1;
 	nodes[median_id].right_id=-1;
@@ -122,20 +126,57 @@ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<f
 	else{//親なし
 		*root_id=median_id;
 	}
-	std::vector<int> right_group(group_size);
-	std::vector<int> left_group(group_size);
-	int right_count=0;
-	int left_count=0;
-	for(int i=0;i<=((group_size-1)/2)-1;i++){////////////////////////////////////////////////////////////////////////////////////points
-		left_group[left_count] = axis_point_with_ids[nodes[median_id].axis][i].id;
-		left_count++;
-	}
-	left_group.resize(left_count);///////////////////////////////////////////////////////////////////////////////////////////////points
-	for(int i=((group_size-1)/2)+1;i<group_size;i++){
-		right_group[right_count] = axis_point_with_ids[nodes[median_id].axis][i].id;
-		right_count++;
-	}
-	right_group.resize(right_count);
+
+	// std::vector<int> right_group(group_size);
+	// std::vector<int> left_group(group_size);
+	// int right_count=0;
+	// int left_count=0;
+
+	// for(int i=0;i<=((group_size-1)/2)-1;i++){////////////////////////////////////////////////////////////////////////////////////points
+	// 	left_group[left_count] = axis_sort_ids[i][nodes[median_id].axis];
+	// 	left_count++;
+	// }
+	// left_group.resize(left_count);///////////////////////////////////////////////////////////////////////////////////////////////points
+	// for(int i=((group_size-1)/2)+1;i<group_size;i++){
+	// 	right_group[right_count] = axis_sort_ids[i][nodes[median_id].axis];
+	// 	right_count++;
+	// }
+	// right_group.resize(right_count);
+
+	// std::vector<int> v0{1,2,3,4};
+	// std::vector<int> v9(v0.begin(),v0.end());  // [1,2,3,4]
+	// std::vector<int> v10(v0.begin(),v0.end());  
+
+	// group_indices.resize(8);
+	// for(int i=0;i<8;i++){
+	// 	group_indices[i]=i;
+	// }
+	// size_t middle = ((8-1)/2);
+
+	size_t middle = ((group_size-1)/2);
+	std::vector<int>::iterator middleIter(group_indices.begin());
+	std::advance(middleIter, middle);
+	// std::cout<<"advance end"<<std::endl;
+
+	std::vector<int> left_group(group_indices.begin(), middleIter);
+	++middleIter;
+	std::vector<int> right_group(middleIter, group_indices.end());
+	// std::cout<<"group end"<<std::endl;
+	// std::cout<<"left group is [";
+	// for(int i=0;i<left_group.size();i++){
+	// 	if(i<10) std::cout<<left_group[i]<<",";
+	// }
+	// std::cout<<"]"<<std::endl;
+
+	// std::cout<<"right group is [";
+	// for(int i=0;i<right_group.size();i++){
+	// 	if(i<10) std::cout<<right_group[i]<<",";
+	// }
+	// std::cout<<"]"<<std::endl;
+
+	//
+
+
 	// std::cout<<"median_id"<<median_id<<std::endl;
 	// std::cout<<"parent_id"<<parent_id<<std::endl;
 	// std::cout<<"left_id"<<nodes[median_id].left_id<<std::endl;
@@ -171,64 +212,6 @@ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<f
 		if(right&&left) return 1;
 	}
 	else return 1;//子がいない
-}
-
-void PointRangeCheckAndAdd(std::vector<int>& range_indices,int head_id,std::vector<std::vector<float>> points,std::vector<float> search_point,float range_sq)
-{
-	float dist_sq = pow(points[head_id][0]-search_point[0],2)+pow(points[head_id][1]-search_point[1],2)+pow(points[head_id][2]-search_point[2],2);
-	if(dist_sq<range_sq){
-		range_indices.push_back(head_id);
-	} 
-}
-
-int SearchSubTree(std::vector<int>& range_indices,int root_id,std::vector <node> nodes,std::vector<std::vector<float>> points,std::vector<float> search_point,float range_sq)
-{
-	int head_id = root_id;
-	bool cross,next_is_right;
-	//潜り
-	while(1){
-		if(search_point[nodes[head_id].axis]>points[head_id][nodes[head_id].axis]) next_is_right = true;
-		else next_is_right = false;
-
-		if(nodes[head_id].right_id>=0&&nodes[head_id].left_id<0) head_id = nodes[head_id].right_id;//一人っ子
-		else if(nodes[head_id].left_id>=0&&nodes[head_id].right_id<0) head_id = nodes[head_id].left_id;//一人っ子
-		else if(nodes[head_id].left_id>=0&&nodes[head_id].right_id>=0){//双子
-			if(next_is_right){//right
-				head_id = nodes[head_id].right_id;
-			}
-			else{//left
-				head_id = nodes[head_id].left_id;
-			}
-		}
-		else break;
-	}
-	//rootが底
-	if(head_id==root_id) {
-		PointRangeCheckAndAdd(range_indices,head_id,points,search_point,range_sq);
-		return 1;
-	}
-	//昇り
-	int last_id;
-	while(1){
-		cross = false;
-		PointRangeCheckAndAdd(range_indices,head_id,points,search_point,range_sq);
-		//昇る
-		last_id = head_id;
-		head_id = nodes[head_id].parent_id;
-		//交差判定　1軸のみ低効率
-		float axis_diff_sq = pow(points[head_id][nodes[head_id].axis] - search_point[nodes[head_id].axis],2);
-		if(axis_diff_sq < range_sq) cross = true;
-		int sub_tree=0;
-		if(cross){
-			if(last_id==nodes[head_id].right_id&&nodes[head_id].left_id>0) sub_tree = SearchSubTree(range_indices,nodes[head_id].left_id,nodes,points,search_point,range_sq);//右から上がってきた
-			if(last_id==nodes[head_id].left_id&&nodes[head_id].right_id>0) sub_tree = SearchSubTree(range_indices,nodes[head_id].right_id,nodes,points,search_point,range_sq);//左から上がってきた
-		}
-		if(head_id==root_id){
-			PointRangeCheckAndAdd(range_indices,head_id,points,search_point,range_sq);
-			break;
-		}
-	}
-	return 1;
 }
 
 __device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indices,int head_id,float* points,float* search_point,float range_sq)//vecotrなしpowなしpushbackなしで作り直す

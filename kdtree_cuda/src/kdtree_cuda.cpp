@@ -135,7 +135,7 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 		if(max_eigen_time<((double)eigen_time_array[i]*(double)pow(10,-9))) max_eigen_time=((double)eigen_time_array[i]*(double)pow(10,-9));
 		// if(normals->points[i].normal_x==0||normals->points[i].normal_y==0||normals->points[i].normal_z==0) std::cout<<normals_array[i][0]<<","<<normals_array[i][1]<<","<<normals_array[i][2];
     }
-	std::cout<<"neighbor_search_time"<<neighbor_time_array[50]*(double)pow(10,-9)<<std::endl;
+	std::cout<<"neighbor_search_time is "<<neighbor_time_array[50]*(double)pow(10,-9)<<"s"<<std::endl;
 	// std::cout<<"cpp_normals : "<<normals_array[0][0]<<","<<normals_array[0][1]<<","<<normals_array[0][2]<<std::endl;
 	// std::cout<<"4"<<std::endl;
 
