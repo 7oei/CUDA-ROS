@@ -41,6 +41,7 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 	kdtree.setInputCloud(remove_NaN_cloud);
 	normals->points.clear();
 	normals->points.resize(remove_NaN_cloud->points.size());
+	std::vector<int> point_neighbor(remove_NaN_cloud->points.size());
     std::vector<std::vector<float>> points_array(remove_NaN_cloud->points.size(), std::vector<float>(3, 0));
     std::vector<std::vector<int>> neighbor_points_indices(remove_NaN_cloud->points.size());
     std::vector<int> neighbor_start_indices(remove_NaN_cloud->points.size());
@@ -102,12 +103,14 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 	section_start = ros::Time::now().toSec();
 
 	// std::cout<<"3"<<std::endl;
-    ComputeNormals(points_array,neighbor_points_indices,neighbor_start_indices,neighbor_points_count,normals_array,curvatures_array,covariance_time_array,eigen_time_array);
+    ComputeNormals(point_neighbor,points_array,neighbor_points_indices,neighbor_start_indices,neighbor_points_count,normals_array,curvatures_array,covariance_time_array,eigen_time_array);
 
 	compute_normal_time = (ros::Time::now().toSec() - section_start);
 	section_start = ros::Time::now().toSec();
-
+	std::sort(point_neighbor.begin(),point_neighbor.end());
+	std::cout<<"host size"<<point_neighbor.size()<<std::endl;
 	// std::cout<<"3.1"<<std::endl;
+	int k=0;
     for(size_t i=0;i<remove_NaN_cloud->points.size();i++){
 		// if(i==0||i==10||i==20)std::cout<<"output normal ("<<i<<") = "<<normals_array[i][0]<<","<<normals_array[i][1]<<","<<normals_array[i][2]<<std::endl;
 		normals->points[i].x = remove_NaN_cloud->points[i].x;
@@ -118,6 +121,12 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 		normals->points[i].normal_z = normals_array[i][2];
 		normals->points[i].curvature = curvatures_array[i];
 		normals->points[i].intensity = 0;
+		if(point_neighbor[k]==i){
+			normals->points[i].curvature = 1;
+			k++;
+		}else{
+			normals->points[i].curvature = 0;
+		}
 		flipNormalTowardsViewpoint(remove_NaN_cloud->points[i], 0.0, 0.0, 0.0, normals->points[i].normal_x, normals->points[i].normal_y, normals->points[i].normal_z);
 		compute_covariance_time+=((double)covariance_time_array[i]*(double)pow(10,-9));//ns→s
 		compute_eigen_time+=((double)eigen_time_array[i]*(double)pow(10,-9));

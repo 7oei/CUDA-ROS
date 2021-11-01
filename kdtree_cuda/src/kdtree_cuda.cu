@@ -394,7 +394,7 @@ __device__ int EigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, in
     return cnt;
 } 
 
-__global__ void NormalsGPU(float* test_points,int* d_parent_ids,int* d_left_ids,int* d_right_ids,int* d_axes,int root_id,int test_points_size,float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time)
+__global__ void NormalsGPU(int *point_neighbor_size,int* point_neighbor,int* d_parent_ids,int* d_left_ids,int* d_right_ids,int* d_axes,int root_id,float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time)
 {
     // printf("normalsGPU");
     //インデックス取得
@@ -403,48 +403,42 @@ __global__ void NormalsGPU(float* test_points,int* d_parent_ids,int* d_left_ids,
     unsigned int output_id=50;
     // printf("idx = %d ,", idx);
 	if(idx==output_id){
-		// node nodes[test_points_size];
-		// std::vector<float> search_point={11,5,0};
-		// std::vector<int> range_indices;
-		// float range_sq = 3*3;
-		// //探索関数の実行
-		// int range_search = d_SearchSubTree(range_indices,root_id,*nodes,*test_points,search_point,range_sq);//nodes,test_points
-		// // std::cout<<"range_indices.size()"<<range_indices.size()<<std::endl;
-		// if(range_search==1) {
-		// 	printf("device range_indices is [");
-		// 	for(int i=0;i<range_indices.size();i++){
-		// 		printf("%d,",range_indices[i]);
-		// 	}
-		// 	printf("]\n");
-		// }
 
-		/////////////////
+		node *nodes = (node*)malloc(sizeof(node) * point_size);
 
-		node *nodes = (node*)malloc(sizeof(node) * test_points_size);
-
-		for(int i=0;i<test_points_size;i++){
+		for(int i=0;i<point_size;i++){
 			nodes[i].parent_id=d_parent_ids[i];
 			nodes[i].left_id=d_left_ids[i];
 			nodes[i].right_id=d_right_ids[i];
 			nodes[i].axis=d_axes[i];
 		}
-		float search_point[3]={8,1,0};
+		float search_point[3];
+		search_point[0]=points[idx*3+0];
+		search_point[1]=points[idx*3+1];
+		search_point[2]=points[idx*3+2];
+		
+		int *range_indices = (int*)malloc(sizeof(int) * point_size);
 		int range_indices_size = 0;
-		int *range_indices = (int*)malloc(sizeof(int) * range_indices_size);
-		float range_sq = 8.5*8.5;
+
+		float range_sq = 0.15*0.15;
+
 		//探索関数の実行
-		int range_search = d_SearchSubTree(&range_indices_size,range_indices,root_id,nodes,test_points,search_point,range_sq);//nodes,test_points
+		int range_search = d_SearchSubTree(&range_indices_size,range_indices,root_id,nodes,points,search_point,range_sq);
 		// std::cout<<"range_indices.size()"<<range_indices.size()<<std::endl;
 		if(range_search==1) {
 			// printf("device range_indices size is =%d",range_indices_size);
 			printf("device range_indices is [");
 			for(int i=0;i<range_indices_size;i++){
 				printf("%d,",range_indices[i]);
+				point_neighbor[i]=range_indices[i];
 			}
 			printf("]\n");
+			point_neighbor_size[0]=range_indices_size;
+			printf("device size %d\n",range_indices_size);
 		}
 		
 		free (nodes);
+		free (range_indices);
 	}
 
 
@@ -580,62 +574,55 @@ __global__ void NormalsGPU(float* test_points,int* d_parent_ids,int* d_left_ids,
     
 }
 
-extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
+extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
 {
-	std::vector<std::vector<float>> points = {
-		{1,7,0},
-		{2,5,0},
-		{5,2,0},
-		{9,9,0},
-		{11,5,0},
-		{16,12,0},
-		{17,2,0},
-		{17,9,0},
-		{19,12,0},
-	};
-	std::vector<int> root_indices={0,1,2,3,4,5,6,7,8};
-
+	std::vector<int> root_indices(points_array.size());
+	for(int i=0;i<points_array.size();i++){
+		root_indices[i]=i;
+	}
 
 	//nodesとroot_id初期化しなくていい？
 	std::vector <node> nodes;
-	nodes.resize(points.size());
+	nodes.resize(points_array.size());
 	// std::cout<<"sizeof(root_indices) = "<<sizeof(root_indices)<<std::endl;
 	int root_id=-1;
-	int create_end = CreateTree(&root_id,nodes,points,root_indices,-1,false);
+	int create_end = CreateTree(&root_id,nodes,points_array,root_indices,-1,false);
 	// if(first){
 	// 	if(create_end==1){
-	// 		for(int i=0;i<points.size();i++){
+	// 		for(int i=0;i<points_array.size();i++){
 	// 			std::cout<<"node["<<i<<"] axis = "<<nodes[i].axis<<", parent_id = "<<nodes[i].parent_id<<", left_id = "<<nodes[i].left_id<<", right_id = "<<nodes[i].right_id<<std::endl;
 	// 		}
 	// 	}
 	// } 
 
-	std::vector<float> search_point={8,1,0};
-	// std::vector<float> search_point={11,5,0};
-	std::vector<int> range_indices;
-	float range_sq = 8.5*8.5;
-	//探索関数の実行
-	int range_search = SearchSubTree(range_indices,root_id,nodes,points,search_point,range_sq);
-	// std::cout<<"range_indices.size()"<<range_indices.size()<<std::endl;
-	if(first){
-		if(range_search==1) {
-			std::cout<<"host range_indices is [";
-			for(int i=0;i<range_indices.size();i++){
-				std::cout<<range_indices[i]<<",";
-			}
-			std::cout<<"]"<<std::endl;
-		}
-	}
+	// std::vector<float> search_point={8,1,0};
+	// // std::vector<float> search_point={11,5,0};
+	// std::vector<int> range_indices;
+	// float range_sq = 8.5*8.5;
+	// //探索関数の実行
+	// int range_search = SearchSubTree(range_indices,root_id,nodes,points,search_point,range_sq);
+	// // std::cout<<"range_indices.size()"<<range_indices.size()<<std::endl;
+	// if(first){
+	// 	if(range_search==1) {
+	// 		std::cout<<"host range_indices is [";
+	// 		for(int i=0;i<range_indices.size();i++){
+	// 			std::cout<<range_indices[i]<<",";
+	// 		}
+	// 		std::cout<<"]"<<std::endl;
+	// 	}
+	// }
 
 
 	// std::cout<<"3.01"<<std::endl;
     //ホスト1次配列宣言
 	//kd
-	std::vector<float> h_test_points(points.size() * 3);
-	std::vector<int> h_parent_ids(points.size());
-	std::vector<int> h_left_ids(points.size());
-	std::vector<int> h_right_ids(points.size());
-	std::vector<int> h_axes(points.size());
+	std::vector<int> h_parent_ids(points_array.size());
+	std::vector<int> h_left_ids(points_array.size());
+	std::vector<int> h_right_ids(points_array.size());
+	std::vector<int> h_axes(points_array.size());
+
+	std::vector<int> h_point_neighbor(points_array.size());
+	std::vector<int> h_point_neighbor_size(1);
 
 	//normal
     std::vector<float> h_points(points_array.size() * 3);
@@ -647,8 +634,9 @@ extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vec
     // std::cout<<"3.02"<<std::endl;
     //デバイス1次配列宣言
 	//kd
-	float *d_test_points;
 	int *d_parent_ids,*d_left_ids,*d_right_ids,*d_axes;
+	int *d_point_neighbor,*d_point_neighbor_size;
+
 	//normal
     float *d_points,*d_normals,*d_curvatures;
     int *d_neighbor_points_indices,*d_neighbor_start_indices;
@@ -657,12 +645,15 @@ extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vec
 
     // std::cout<<"3.03"<<std::endl;
     //メモリ確保
-	cudaMalloc((void **)&d_test_points, points.size() * 3 * sizeof(float));
-	cudaMalloc((void **)&d_parent_ids, points.size() * sizeof(int));
-	cudaMalloc((void **)&d_left_ids, points.size() * sizeof(int));
-	cudaMalloc((void **)&d_right_ids, points.size() * sizeof(int));
-	cudaMalloc((void **)&d_axes, points.size() * sizeof(int));
+	//kd
+	cudaMalloc((void **)&d_parent_ids, points_array.size() * sizeof(int));
+	cudaMalloc((void **)&d_left_ids, points_array.size() * sizeof(int));
+	cudaMalloc((void **)&d_right_ids, points_array.size() * sizeof(int));
+	cudaMalloc((void **)&d_axes, points_array.size() * sizeof(int));
 
+	cudaMalloc((void **)&d_point_neighbor, points_array.size() * sizeof(int));
+	cudaMalloc((void **)&d_point_neighbor_size, sizeof(int));
+	//normal
     cudaMalloc((void **)&d_points, points_array.size() * 3 * sizeof(float));
     cudaMalloc((void **)&d_neighbor_points_indices, neighbor_points_count * sizeof(int));
     cudaMalloc((void **)&d_neighbor_start_indices, points_array.size() * sizeof(int));
@@ -682,28 +673,22 @@ extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vec
             h_neighbor_points_indices[l]=neighbor_points_indices[i][j];
             l++;
         }
-    }
-	k=0;
-	for(int i=0;i<points.size();i++){
-		for(int j=0;j<3;j++){
-			h_test_points[k]=points[i][j];
-			k++;
-		}
 		h_parent_ids[i]=nodes[i].parent_id;
 		h_left_ids[i]=nodes[i].left_id;
 		h_right_ids[i]=nodes[i].right_id;
 		h_axes[i]=nodes[i].axis;
-	}
+    }
+
 
 
     // std::cout<<"3.05"<<std::endl;
     //コピー
-	cudaMemcpy(d_test_points, &h_test_points[0], points.size() * 3 * sizeof(float), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_parent_ids, &h_parent_ids[0], points.size() * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_left_ids, &h_left_ids[0], points.size() * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_right_ids, &h_right_ids[0], points.size() * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_axes, &h_axes[0], points.size() * sizeof(int), cudaMemcpyHostToDevice);
-
+	//kd
+	cudaMemcpy(d_parent_ids, &h_parent_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_left_ids, &h_left_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_right_ids, &h_right_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_axes, &h_axes[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	//normal
     cudaMemcpy(d_points, &h_points[0], points_array.size() * 3 * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_neighbor_points_indices, &h_neighbor_points_indices[0], neighbor_points_count * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_neighbor_start_indices, &neighbor_start_indices[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
@@ -716,16 +701,27 @@ extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vec
     // std::cout<<"normalsGPUstart"<<std::endl;
     cudaDeviceSetLimit(cudaLimitStackSize, 1024*8);
     //実行
-    NormalsGPU<<<grid,block>>>(d_test_points,d_parent_ids,d_left_ids,d_right_ids,d_axes,root_id,points.size(),d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
+    NormalsGPU<<<grid,block>>>(d_point_neighbor_size,d_point_neighbor,d_parent_ids,d_left_ids,d_right_ids,d_axes,root_id,d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
     // std::cout<<"normalsGPUend"<<std::endl;
     // std::cout<<"3.08"<<std::endl;
     //コピー
+	//kd
+	cudaMemcpy(&h_point_neighbor[0], d_point_neighbor, points_array.size() * sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(&h_point_neighbor_size[0], d_point_neighbor_size, sizeof(int), cudaMemcpyDeviceToHost);
+	//normal
     cudaMemcpy(&h_normals[0], d_normals, points_array.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(&h_curvatures[0], d_curvatures, points_array.size() * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(&h_covariance_compute_time[0], d_covariance_compute_time, points_array.size() * sizeof(long long int), cudaMemcpyDeviceToHost);
     cudaMemcpy(&h_eigen_compute_time[0], d_eigen_compute_time, points_array.size() * sizeof(long long int), cudaMemcpyDeviceToHost);
     // std::cout<<"3.09"<<std::endl;
     //2次配列化
+	for(int i=0;i<h_point_neighbor_size[0];i++){
+		point_neighbor[i]=h_point_neighbor[i];
+	}
+	
+	point_neighbor.resize(h_point_neighbor_size[0]);
+	std::cout<<"host cu size "<<h_point_neighbor_size[0]<<std::endl;
+
     k=0;
     for(int i=0;i<points_array.size();i++){//点群
         for(int j=0;j<3;j++){//x,y,z
@@ -740,11 +736,14 @@ extern void ComputeNormals(std::vector<std::vector<float>> points_array,std::vec
     // std::cout<<"3.10"<<std::endl;
     //メモリ解放
 	//kd
-	cudaFree(d_test_points);
 	cudaFree(d_parent_ids);
 	cudaFree(d_left_ids);
 	cudaFree(d_right_ids);
 	cudaFree(d_axes);
+
+	cudaFree(d_point_neighbor);
+	cudaFree(d_point_neighbor_size);
+
 	//normal
     cudaFree(d_points);
     cudaFree(d_neighbor_points_indices);
