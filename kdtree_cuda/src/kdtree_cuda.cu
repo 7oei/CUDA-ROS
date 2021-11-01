@@ -10,6 +10,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 int sort_axis=0;
 
@@ -55,7 +56,7 @@ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<f
 	point_with_id point_with_ids[group_size];
 	point_with_id axis_point_with_ids[3][group_size];
 	for(sort_axis=0; sort_axis<3; sort_axis++){
-		for(int i=0;i<group_size;i++){
+		for(int i=0;i<group_size;i++){/////////////////////////////////////////////////////////////////////////////////////////////////3*points
 			point_with_ids[i].id=group_indices[i];
 			point_with_ids[i].pos[0]=points[group_indices[i]][0];
 			point_with_ids[i].pos[1]=points[group_indices[i]][1];
@@ -69,10 +70,8 @@ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<f
 	int median_id;
 	for(sort_axis=0; sort_axis<3; sort_axis++){//x,y,zそれぞれにソート
 		// std::cout<<"sort_axis = "<<sort_axis<<std::endl;
-
 		qsort(point_with_ids, group_size, sizeof(point_with_id), AxisSort);
-		for (int i=0 ; i < group_size ; i++)
-		{
+		for (int i=0 ; i < group_size ; i++){///////////////////////////////////////////////////////////////////////////////////////////3*points
 			axis_point_with_ids[sort_axis][i].id = point_with_ids[i].id;
 			axis_point_with_ids[sort_axis][i].pos[0] = point_with_ids[i].pos[0];
 			axis_point_with_ids[sort_axis][i].pos[1] = point_with_ids[i].pos[1];
@@ -127,11 +126,11 @@ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std::vector<f
 	std::vector<int> left_group(group_size);
 	int right_count=0;
 	int left_count=0;
-	for(int i=0;i<=((group_size-1)/2)-1;i++){//愚直
+	for(int i=0;i<=((group_size-1)/2)-1;i++){////////////////////////////////////////////////////////////////////////////////////points
 		left_group[left_count] = axis_point_with_ids[nodes[median_id].axis][i].id;
 		left_count++;
 	}
-	left_group.resize(left_count);
+	left_group.resize(left_count);///////////////////////////////////////////////////////////////////////////////////////////////points
 	for(int i=((group_size-1)/2)+1;i<group_size;i++){
 		right_group[right_count] = axis_point_with_ids[nodes[median_id].axis][i].id;
 		right_count++;
@@ -394,7 +393,7 @@ __device__ int EigenJacobiMethod(float *a, float *v, int n, float eps = 1e-8, in
     return cnt;
 } 
 
-__global__ void NormalsGPU(int *point_neighbor_size,int* point_neighbor,int* d_parent_ids,int* d_left_ids,int* d_right_ids,int* d_axes,int root_id,float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time)
+__global__ void NormalsGPU(long long int* neighbor_time,int *point_neighbor_size,int* point_neighbor,int* d_parent_ids,int* d_left_ids,int* d_right_ids,int* d_axes,int root_id,float* points,int point_size,int* neighbor_points_indices,int* neighbor_start_indices,int neighbor_points_count,float* normals,float* curvatures,long long int* covariance_time,long long int* eigen_time)
 {
     // printf("normalsGPU");
     //インデックス取得
@@ -403,7 +402,9 @@ __global__ void NormalsGPU(int *point_neighbor_size,int* point_neighbor,int* d_p
     unsigned int output_id=50;
     // printf("idx = %d ,", idx);
 	if(idx==output_id){
-
+		long long int neighbor_start, neighbor_stop;
+		asm volatile("mov.u64  %0, %globaltimer;" : "=l"(neighbor_start));
+		////////////////////////////////////////////////////////////////
 		node *nodes = (node*)malloc(sizeof(node) * point_size);
 
 		for(int i=0;i<point_size;i++){
@@ -427,18 +428,21 @@ __global__ void NormalsGPU(int *point_neighbor_size,int* point_neighbor,int* d_p
 		// std::cout<<"range_indices.size()"<<range_indices.size()<<std::endl;
 		if(range_search==1) {
 			// printf("device range_indices size is =%d",range_indices_size);
-			printf("device range_indices is [");
+			// printf("device range_indices is [");
 			for(int i=0;i<range_indices_size;i++){
-				printf("%d,",range_indices[i]);
+				// printf("%d,",range_indices[i]);
 				point_neighbor[i]=range_indices[i];
 			}
-			printf("]\n");
+			// printf("]\n");
 			point_neighbor_size[0]=range_indices_size;
-			printf("device size %d\n",range_indices_size);
+			// printf("device size %d\n",range_indices_size);
 		}
 		
 		free (nodes);
 		free (range_indices);
+		asm volatile("mov.u64  %0, %globaltimer;" : "=l"(neighbor_stop));
+		neighbor_time[idx]=neighbor_stop - neighbor_start;
+		////////////////////////////////////////////////////////////////////
 	}
 
 
@@ -574,7 +578,7 @@ __global__ void NormalsGPU(int *point_neighbor_size,int* point_neighbor,int* d_p
     
 }
 
-extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
+extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector<int>& point_neighbor,std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
 {
 	std::vector<int> root_indices(points_array.size());
 	for(int i=0;i<points_array.size();i++){
@@ -586,7 +590,11 @@ extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vec
 	nodes.resize(points_array.size());
 	// std::cout<<"sizeof(root_indices) = "<<sizeof(root_indices)<<std::endl;
 	int root_id=-1;
+	clock_t build_start,build_end;
+	build_start = clock();
 	int create_end = CreateTree(&root_id,nodes,points_array,root_indices,-1,false);
+	build_end = clock();
+	printf("create tree time is %.2fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
 	// if(first){
 	// 	if(create_end==1){
 	// 		for(int i=0;i<points_array.size();i++){
@@ -623,6 +631,7 @@ extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vec
 
 	std::vector<int> h_point_neighbor(points_array.size());
 	std::vector<int> h_point_neighbor_size(1);
+	std::vector<long long int> h_neighbor_time(points_array.size());
 
 	//normal
     std::vector<float> h_points(points_array.size() * 3);
@@ -636,6 +645,7 @@ extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vec
 	//kd
 	int *d_parent_ids,*d_left_ids,*d_right_ids,*d_axes;
 	int *d_point_neighbor,*d_point_neighbor_size;
+	long long int *d_neighbor_time;
 
 	//normal
     float *d_points,*d_normals,*d_curvatures;
@@ -653,6 +663,7 @@ extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vec
 
 	cudaMalloc((void **)&d_point_neighbor, points_array.size() * sizeof(int));
 	cudaMalloc((void **)&d_point_neighbor_size, sizeof(int));
+	cudaMalloc((void **)&d_neighbor_time, points_array.size() * sizeof(long long int));
 	//normal
     cudaMalloc((void **)&d_points, points_array.size() * 3 * sizeof(float));
     cudaMalloc((void **)&d_neighbor_points_indices, neighbor_points_count * sizeof(int));
@@ -701,13 +712,14 @@ extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vec
     // std::cout<<"normalsGPUstart"<<std::endl;
     cudaDeviceSetLimit(cudaLimitStackSize, 1024*8);
     //実行
-    NormalsGPU<<<grid,block>>>(d_point_neighbor_size,d_point_neighbor,d_parent_ids,d_left_ids,d_right_ids,d_axes,root_id,d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
+    NormalsGPU<<<grid,block>>>(d_neighbor_time,d_point_neighbor_size,d_point_neighbor,d_parent_ids,d_left_ids,d_right_ids,d_axes,root_id,d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
     // std::cout<<"normalsGPUend"<<std::endl;
     // std::cout<<"3.08"<<std::endl;
     //コピー
 	//kd
 	cudaMemcpy(&h_point_neighbor[0], d_point_neighbor, points_array.size() * sizeof(int), cudaMemcpyDeviceToHost);
 	cudaMemcpy(&h_point_neighbor_size[0], d_point_neighbor_size, sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(&h_neighbor_time[0], d_neighbor_time, points_array.size() * sizeof(long long int), cudaMemcpyDeviceToHost);
 	//normal
     cudaMemcpy(&h_normals[0], d_normals, points_array.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(&h_curvatures[0], d_curvatures, points_array.size() * sizeof(float), cudaMemcpyDeviceToHost);
@@ -720,7 +732,7 @@ extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vec
 	}
 	
 	point_neighbor.resize(h_point_neighbor_size[0]);
-	std::cout<<"host cu size "<<h_point_neighbor_size[0]<<std::endl;
+	// std::cout<<"host cu size "<<h_point_neighbor_size[0]<<std::endl;
 
     k=0;
     for(int i=0;i<points_array.size();i++){//点群
@@ -731,6 +743,7 @@ extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vec
         curvatures_array[i]=h_curvatures[i];
         covariance_compute_time[i]=h_covariance_compute_time[i];
         eigen_compute_time[i]=h_eigen_compute_time[i];
+		neighbor_time[i]=h_neighbor_time[i];
     }
     // std::cout<<"cu_normals : "<<normals_array[0][0]<<","<<normals_array[0][1]<<","<<normals_array[0][2]<<std::endl;
     // std::cout<<"3.10"<<std::endl;
@@ -743,6 +756,7 @@ extern void ComputeNormals(std::vector<int>& point_neighbor,std::vector<std::vec
 
 	cudaFree(d_point_neighbor);
 	cudaFree(d_point_neighbor_size);
+	cudaFree(d_neighbor_time);
 
 	//normal
     cudaFree(d_points);

@@ -48,6 +48,7 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
     std::vector<std::vector<float>> normals_array(remove_NaN_cloud->points.size(), std::vector<float>(3));
 	std::vector<float> curvatures_array(remove_NaN_cloud->points.size());
 	std::vector<long long int> covariance_time_array(remove_NaN_cloud->points.size());
+	std::vector<long long int> neighbor_time_array(remove_NaN_cloud->points.size());
 	std::vector<long long int> eigen_time_array(remove_NaN_cloud->points.size());
 	int neighbor_points_count=0;
 	// std::cout<<std::endl;
@@ -103,12 +104,12 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 	section_start = ros::Time::now().toSec();
 
 	// std::cout<<"3"<<std::endl;
-    ComputeNormals(point_neighbor,points_array,neighbor_points_indices,neighbor_start_indices,neighbor_points_count,normals_array,curvatures_array,covariance_time_array,eigen_time_array);
+    ComputeNormals(neighbor_time_array,point_neighbor,points_array,neighbor_points_indices,neighbor_start_indices,neighbor_points_count,normals_array,curvatures_array,covariance_time_array,eigen_time_array);
 
 	compute_normal_time = (ros::Time::now().toSec() - section_start);
 	section_start = ros::Time::now().toSec();
 	std::sort(point_neighbor.begin(),point_neighbor.end());
-	std::cout<<"host size"<<point_neighbor.size()<<std::endl;
+	// std::cout<<"host size"<<point_neighbor.size()<<std::endl;
 	// std::cout<<"3.1"<<std::endl;
 	int k=0;
     for(size_t i=0;i<remove_NaN_cloud->points.size();i++){
@@ -132,9 +133,9 @@ void CloudCallback (const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 		compute_eigen_time+=((double)eigen_time_array[i]*(double)pow(10,-9));
 		if(max_covariance_time<((double)covariance_time_array[i]*(double)pow(10,-9))) max_covariance_time=((double)covariance_time_array[i]*(double)pow(10,-9));
 		if(max_eigen_time<((double)eigen_time_array[i]*(double)pow(10,-9))) max_eigen_time=((double)eigen_time_array[i]*(double)pow(10,-9));
-
 		// if(normals->points[i].normal_x==0||normals->points[i].normal_y==0||normals->points[i].normal_z==0) std::cout<<normals_array[i][0]<<","<<normals_array[i][1]<<","<<normals_array[i][2];
     }
+	std::cout<<"neighbor_search_time"<<neighbor_time_array[50]*(double)pow(10,-9)<<std::endl;
 	// std::cout<<"cpp_normals : "<<normals_array[0][0]<<","<<normals_array[0][1]<<","<<normals_array[0][2]<<std::endl;
 	// std::cout<<"4"<<std::endl;
 
