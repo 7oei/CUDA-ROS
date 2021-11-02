@@ -223,7 +223,123 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 	else return 1;//子がいない
 }
 
-__device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indices,int head_id,float* points,float* search_point,float range_sq)//vecotrなしpowなしpushbackなしで作り直す
+__host__ int CreateNode(int* root_id,int point_size,std::vector <node>& nodes, std::vector<std::vector<int>> axis_sort_ids,int depth,int parent_id,bool node_is_right)
+{
+
+	// std::cout << "oppai 0" << std::endl;
+	// std::cout << std::endl;
+	int group_size = axis_sort_ids[0].size();
+	int axis = depth % 3;
+	size_t middle = ((group_size-1)/2);
+	int median_id = axis_sort_ids[axis][middle];
+	nodes[median_id].axis = axis;
+	nodes[median_id].parent_id = parent_id;
+	nodes[median_id].left_id = -1;
+	nodes[median_id].right_id = -1;
+	if(parent_id >= 0){ // 親あり
+		if(!node_is_right) nodes[parent_id].left_id = median_id;
+		if(node_is_right) nodes[parent_id].right_id = median_id;
+	}
+	else{ // 親なし
+		*root_id = median_id;
+	}
+	// std::cout << "oppai 4" << std::endl;
+	// std::cout<<std::endl;
+	// std::cout<<std::endl;
+	// std::cout<<std::endl;
+	// std::cout << "axis_sort_ids ="<<std::endl;
+	// for(int j = 0; j < 3; j++){
+	// 	if(j==0) std::cout << "x =";
+	// 	if(j==1) std::cout << "y =";
+	// 	if(j==2) std::cout << "z =";
+	// 	for(int i = 0; i < group_size; i++){
+	// 		std::cout << axis_sort_ids[j][i] << ",";
+	// 	}
+	// 	std::cout<<std::endl;
+	// }
+
+	if(group_size > 1){ // 子あり
+		std::vector<int>::iterator middle_iter(axis_sort_ids[axis].begin());
+		std::advance(middle_iter,middle);
+		std::vector<int> left_group(axis_sort_ids[axis].begin(),middle_iter);
+		++middle_iter;
+		std::vector<int> right_group(middle_iter,axis_sort_ids[axis].end());
+
+		// std::cout<<"median_id"<<median_id<<std::endl;
+		// std::cout<<"middle"<<middle<<std::endl;
+		// std::cout<<"axis"<<nodes[median_id].axis<<std::endl;
+		// std::cout<<"group is (";
+		// for(int i=0;i<group_size;i++){
+		// 	std::cout<<axis_sort_ids[axis][i]<<",";
+		// }
+		// std::cout<<")"<<std::endl;
+		// std::cout<<"left_group is (";
+		// for(int i=0;i<left_group.size();i++){
+		// 	std::cout<<left_group[i]<<",";
+		// }
+		// std::cout<<")"<<std::endl;
+		// std::cout<<"right_group is (";
+		// for(int i=0;i<right_group.size();i++){
+		// 	std::cout<<right_group[i]<<",";
+		// }
+		// std::cout<<")"<<std::endl;
+
+		// std::cout << "oppai 1" << std::endl;
+
+		std::vector<std::vector<int>> left_axis_sort_ids(3,std::vector<int>(left_group.size()));
+		std::vector<std::vector<int>> right_axis_sort_ids(3,std::vector<int>(right_group.size()));
+
+		std::vector<int> next_group(point_size,0);/////////////これどうにかしたい
+		std::vector<int> left_axis_count(3,0);
+		std::vector<int> right_axis_count(3,0);
+		// std::cout << "oppai 1.5" << std::endl;
+		// std::cout << "next_group.size()" << next_group.size() <<std::endl;
+		// std::cout << "left_group.size()" << left_group.size() <<std::endl;
+		// std::cout << "right_group.size()" << right_group.size() <<std::endl;
+		for(int i = 0; i < left_group.size(); i++){
+			// std::cout << "oppai 1.51" << std::endl;
+			left_axis_sort_ids[axis][i] = left_group[i];
+			// std::cout << "oppai 1.52" << std::endl;
+			// std::cout << "left_group[i]" << left_group[i] <<std::endl;
+			next_group[left_group[i]] = -1;//これで死んでそう//left_group[i]がnext_groupのレンジを超えている//この式の参照indexおかしい//1段目では正しく作用
+		}
+		// std::cout << "oppai 1.6" << std::endl;
+		for(int i = 0; i < right_group.size(); i++){
+			right_axis_sort_ids[axis][i] = right_group[i];
+			// std::cout << "right_group[i]" << right_group[i] <<std::endl;
+			next_group[right_group[i]] = 1;
+		}
+		// std::cout << "oppai 2" << std::endl;
+		for(int i = 0; i < group_size; i++){
+			for(int j = 0; j < 3; j++){
+				if(j==axis) continue;
+				if(next_group[axis_sort_ids[j][i]] == -1){
+					left_axis_sort_ids[j][left_axis_count[j]] = axis_sort_ids[j][i];
+					left_axis_count[j]++;
+					// std::cout << "left_axis_count["<<j<<"] = "<<left_axis_count[j]<<std::endl;
+				}
+				else if(next_group[axis_sort_ids[j][i]] == 1){
+					right_axis_sort_ids[j][right_axis_count[j]] = axis_sort_ids[j][i];
+					right_axis_count[j]++;
+					// std::cout << "right_axis_count["<<j<<"] = "<<right_axis_count[j]<<std::endl;
+				}
+			}
+		}
+
+		bool left = false;
+		bool right = false;
+		if(left_group.size() > 0) left = CreateNode(root_id,point_size,nodes,left_axis_sort_ids,depth+1,median_id,false);
+		else left = true;
+
+		if(right_group.size() > 0) right = CreateNode(root_id,point_size,nodes,right_axis_sort_ids,depth+1,median_id,true);
+		else right = true;
+
+		if(right&&left) return 1;
+	}
+	else return 1;
+}
+
+__device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indices,int head_id,float* points,float* search_point,float range_sq)//vectorなしpowなしpushbackなしで作り直す
 {
 	float dist_sq = powf(points[head_id*3+0]-search_point[0],2)+powf(points[head_id*3+1]-search_point[1],2)+powf(points[head_id*3+2]-search_point[2],2);
 	if(dist_sq<range_sq){
@@ -233,7 +349,7 @@ __device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indic
 	} 
 }
 
-__device__ int d_SearchSubTree(int *range_indices_size,int *range_indices,int root_id,node* nodes,float* points,float* search_point,float range_sq)//vecotrなしpowなしで作り直す
+__device__ int d_SearchSubTree(int *range_indices_size,int *range_indices,int root_id,node* nodes,float* points,float* search_point,float range_sq)//vectorなしpowなしで作り直す
 {
 	int head_id = root_id;
 	bool cross,next_is_right;
@@ -572,21 +688,51 @@ __global__ void NormalsGPU(long long int* neighbor_time,int *point_neighbor_size
 
 extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector<int>& point_neighbor,std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
 {
-	std::vector<int> root_indices(points_array.size());
-	for(int i=0;i<points_array.size();i++){
-		root_indices[i]=i;
-	}
+	// points_array.clear();
+	// points_array.resize(7);
+	// points_array = {{6, 0, 0}, 
+	// 				{5, 3, 0},
+	// 				{3, 4, 0},
+	// 				{4, 6, 0},
+	// 				{2, 5, 0},
+	// 				{1, 2, 0},
+	// 				{0, 1, 0}};
 
-	//nodesとroot_id初期化しなくていい？
+
 	std::vector <node> nodes;
 	nodes.resize(points_array.size());
-	// std::cout<<"sizeof(root_indices) = "<<sizeof(root_indices)<<std::endl;
 	int root_id=-1;
 	clock_t build_start,build_end;
 	build_start = clock();
-	int create_end = CreateTree(&root_id,nodes,points_array,root_indices,-1,false);
+
+	/////////////////////////////////////////////////////////////////////////////////////////
+	// std::vector<int> root_indices(points_array.size());
+	// for(int i=0;i<points_array.size();i++){
+	// 	root_indices[i]=i;
+	// }
+	// int create_end = CreateTree(&root_id,nodes,points_array,root_indices,-1,false);
+	/////////////////////////////////////////////////////////////////////////////////////////
+
+	/////////////////////////////////////////////////////////////////////////////////////////
+	std::vector<std::vector<int>> axis_sort_ids(3,std::vector<int>(points_array.size()));
+	point_with_id point_with_ids[points_array.size()];
+	for(int i=0;i<points_array.size();i++){
+		point_with_ids[i].id = i;
+		point_with_ids[i].pos[0] = points_array[i][0];
+		point_with_ids[i].pos[1] = points_array[i][1];
+		point_with_ids[i].pos[2] = points_array[i][2];
+	}
+	for(sort_axis=0; sort_axis<3; sort_axis++){
+		qsort(point_with_ids, points_array.size(), sizeof(point_with_id), AxisSort);
+		for (int i=0 ; i < points_array.size() ; i++){
+			axis_sort_ids[sort_axis][i]=point_with_ids[i].id;
+		}
+	}
+	int create_end = CreateNode(&root_id,points_array.size(),nodes,axis_sort_ids,0,-1,false);
+	/////////////////////////////////////////////////////////////////////////////////////////
+	
 	build_end = clock();
-	printf("create tree time is %.2fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
+	printf("create tree time is %.5fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
 
 	// if(first){
 	// 	if(create_end==1){
