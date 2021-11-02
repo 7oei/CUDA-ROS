@@ -27,7 +27,6 @@ typedef struct
 	int left_id;
 	int right_id;
 	int axis;
-	bool node_is_right;
 } node;
 
 bool first=true;
@@ -55,16 +54,15 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 	int group_size = group_indices.size();
 	// std::cout<<"group_size"<<group_size<<std::endl;
 	point_with_id point_with_ids[group_size];
-	std::vector<std::vector<int>> axis_sort_ids(group_size, std::vector<int>(3));
-
-	for(sort_axis=0; sort_axis<3; sort_axis++){
-		for(int i=0;i<group_size;i++){/////////////////////////////////////////////////////////////////////////////////////////////////3*points
-			point_with_ids[i].id=group_indices[i];
-			point_with_ids[i].pos[0]=points[group_indices[i]][0];
-			point_with_ids[i].pos[1]=points[group_indices[i]][1];
-			point_with_ids[i].pos[2]=points[group_indices[i]][2];
-		}
+	std::vector<std::vector<int>> axis_sort_ids(3, std::vector<int>(group_size));
+	// std::cout<<"oppai 1 "<<std::endl;
+	for(int i=0;i<group_size;i++){/////////////////////////////////////////////////////////////////////////////////////////////////3*points
+		point_with_ids[i].id=group_indices[i];
+		point_with_ids[i].pos[0]=points[group_indices[i]][0];
+		point_with_ids[i].pos[1]=points[group_indices[i]][1];
+		point_with_ids[i].pos[2]=points[group_indices[i]][2];
 	}
+	// std::cout<<"oppai 2 "<<std::endl;
 
 	//ソート
 	float max[3],min[3],median[3],length[3];
@@ -74,7 +72,7 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 		// std::cout<<"sort_axis = "<<sort_axis<<std::endl;
 		qsort(point_with_ids, group_size, sizeof(point_with_id), AxisSort);
 		for (int i=0 ; i < group_size ; i++){///////////////////////////////////////////////////////////////////////////////////////////3*points
-			axis_sort_ids[i][sort_axis]=point_with_ids[i].id;
+			axis_sort_ids[sort_axis][i]=point_with_ids[i].id;
 			// printf("%d, %f, %f, %f \n", point_with_ids[i].id, point_with_ids[i].pos[0], point_with_ids[i].pos[1], point_with_ids[i].pos[2]);
 		}
 		// std::cout<<std::endl;
@@ -85,7 +83,7 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 		median[sort_axis]=point_with_ids[(group_size-1)/2].pos[sort_axis];//偶数なら小さい方(-1)消せば大きい方
 		axis_median_id[sort_axis]=point_with_ids[(group_size-1)/2].id;
 	}
-
+	// std::cout<<"oppai 3 "<<std::endl;
 	// std::cout<<"x_length = "<< length[0] <<", x_median["<<axis_median_id[0]<<"] = "<<median[0]<<std::endl;
 	// std::cout<<"y_length = "<< length[1] <<", y_median["<<axis_median_id[1]<<"] = "<<median[1]<<std::endl;
 	// std::cout<<"z_length = "<< length[2] <<", z_median["<<axis_median_id[2]<<"] = "<<median[2]<<std::endl;
@@ -108,10 +106,18 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 		median_id=axis_median_id[2];
 		nodes[median_id].axis=2;
 	}
+	// std::cout<<"oppai 4 "<<std::endl;
 
 	for(int i=0;i<group_size;i++){/////////////////////////////////////////////////////////////////////////////////////////////////points
-		group_indices[i]=axis_sort_ids[i][nodes[median_id].axis];
+		group_indices[i]=axis_sort_ids[nodes[median_id].axis][i];
 	}
+	// std::cout<<"oppai 5 "<<std::endl;
+	// memcpy(&group_indices[0], axis_sort_ids[nodes[median_id].axis], group_size*sizeof(int));
+	// std::vector<int> group_indices2;
+	// group_indices.resize(0);
+	// copy(axis_sort_ids[nodes[median_id].axis].begin(), axis_sort_ids[nodes[median_id].axis].end(), back_inserter(group_indices) );
+
+
 
 	//node初期化
 	nodes[median_id].left_id=-1;
@@ -126,6 +132,7 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 	else{//親なし
 		*root_id=median_id;
 	}
+	// std::cout<<"oppai 6 "<<std::endl;
 
 	// std::vector<int> right_group(group_size);
 	// std::vector<int> left_group(group_size);
@@ -133,12 +140,12 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 	// int left_count=0;
 
 	// for(int i=0;i<=((group_size-1)/2)-1;i++){////////////////////////////////////////////////////////////////////////////////////points
-	// 	left_group[left_count] = axis_sort_ids[i][nodes[median_id].axis];
+	// 	left_group[left_count] = axis_sort_ids[nodes[median_id].axis][i];
 	// 	left_count++;
 	// }
 	// left_group.resize(left_count);///////////////////////////////////////////////////////////////////////////////////////////////points
 	// for(int i=((group_size-1)/2)+1;i<group_size;i++){
-	// 	right_group[right_count] = axis_sort_ids[i][nodes[median_id].axis];
+	// 	right_group[right_count] = axis_sort_ids[nodes[median_id].axis][i];
 	// 	right_count++;
 	// }
 	// right_group.resize(right_count);
@@ -161,6 +168,7 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 	std::vector<int> left_group(group_indices.begin(), middleIter);
 	++middleIter;
 	std::vector<int> right_group(middleIter, group_indices.end());
+	// std::cout<<"oppai 7 "<<std::endl;
 	// std::cout<<"group end"<<std::endl;
 	// std::cout<<"left group is [";
 	// for(int i=0;i<left_group.size();i++){
@@ -209,6 +217,7 @@ __host__ int CreateTree(int* root_id,std::vector <node>& nodes, std::vector<std:
 			right= CreateTree(root_id,nodes,points,right_group,median_id,true);
 		}
 		else right=true;
+		// std::cout<<"oppai 8 "<<std::endl;
 		if(right&&left) return 1;
 	}
 	else return 1;//子がいない
@@ -578,6 +587,7 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 	int create_end = CreateTree(&root_id,nodes,points_array,root_indices,-1,false);
 	build_end = clock();
 	printf("create tree time is %.2fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
+
 	// if(first){
 	// 	if(create_end==1){
 	// 		for(int i=0;i<points_array.size();i++){
