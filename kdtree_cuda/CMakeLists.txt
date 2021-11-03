@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(kdtree_cuda)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11)
+# add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -19,6 +19,8 @@ find_package(catkin REQUIRED COMPONENTS
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(CUDA 10.2 REQUIRED)
 find_package(OpenCV REQUIRED)
+set(CUDA_SEPARABLE_COMPILATION TRUE)
+list(APPEND CUDA_NVCC_FLAGS -gencode arch=compute_61,code=sm_61;)
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
@@ -162,9 +164,11 @@ cuda_add_executable(kdtree_cuda
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
+
 target_link_libraries(kdtree_cuda
   ${catkin_LIBRARIES}
   ${CUDA_LIBRARIES}
+  ${CUDA_cudadevrt_LIBRARY}
   ${OpenCV_LIBRARIES}
 )
 

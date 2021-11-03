@@ -686,8 +686,31 @@ __global__ void NormalsGPU(long long int* neighbor_time,int *point_neighbor_size
     
 }
 
+__global__ void ChildKernel(void* data){
+
+	printf("child : %d, %d\n", blockIdx.x, threadIdx.x);
+
+}
+
+__global__ void ParentKernel(void* data){
+
+	printf("parent: %d, %d\n", blockIdx.x, threadIdx.x);
+
+	ChildKernel<<<1, 2>>>(data);
+	cudaDeviceSynchronize();
+
+}
+
+
 extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector<int>& point_neighbor,std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
 {
+
+	int nbytes = 1024;
+	int *data_dev = 0;
+	cudaMalloc((void**)&data_dev, nbytes);
+	cudaMemset(data_dev, 255, nbytes);
+	ParentKernel<<<1, 2>>>(data_dev);
+	
 	// points_array.clear();
 	// points_array.resize(7);
 	// points_array = {{6, 0, 0}, 
