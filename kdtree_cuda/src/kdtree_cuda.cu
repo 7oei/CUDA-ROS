@@ -14,7 +14,7 @@
 #include <time.h>
 
 int sort_axis=0;
-
+int frames=0;
 typedef struct
 {
 	int	id;
@@ -339,7 +339,286 @@ __host__ int CreateNode(int* root_id,int point_size,std::vector <node>& nodes, s
 	else return 1;
 }
 
-__device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indices,int head_id,float* points,float* search_point,float range_sq)//vectorなしpowなしpushbackなしで作り直す
+__global__ void d_CreateNode(int point_size,int group_size,int depth,int parent_id,bool node_is_right,int *x_sort_ids,int *y_sort_ids,int *z_sort_ids,int *root_id,node* nodes)
+{
+
+	// printf("create node open\n");
+	unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int idx = ix;
+	printf("idx = %d, ",idx);
+	// printf("group size = %d\n",group_size);
+	int axis = depth % 3;
+	size_t middle = ((group_size-1)/2);
+	int median_id;
+	if(axis==0) median_id = x_sort_ids[middle];
+	if(axis==1) median_id = y_sort_ids[middle];
+	if(axis==2) median_id = z_sort_ids[middle];
+
+	// if(median_id==1||median_id==13||median_id==14||median_id==15||median_id==19||median_id==36||median_id==45){//ここでは正しい
+	// 	printf("1 x_sort_ids[] = ");
+	// 	for(int i=0;i<group_size;i++){
+	// 		printf("%d,",x_sort_ids[i]);
+	// 	}
+	// 	printf("\n");
+	// }
+
+	int *copy_x_sort_ids,*copy_y_sort_ids,*copy_z_sort_ids;
+	copy_x_sort_ids = (int *)malloc(group_size * sizeof(int));
+	copy_y_sort_ids = (int *)malloc(group_size * sizeof(int));
+	copy_z_sort_ids = (int *)malloc(group_size * sizeof(int));
+	memcpy(copy_x_sort_ids, x_sort_ids, group_size * sizeof(int));
+	memcpy(copy_y_sort_ids, y_sort_ids, group_size * sizeof(int));
+	memcpy(copy_z_sort_ids, z_sort_ids, group_size * sizeof(int));
+
+	nodes[median_id].axis = axis;
+	nodes[median_id].parent_id = parent_id;
+	nodes[median_id].left_id = -1;
+	nodes[median_id].right_id = -1;
+	// if(median_id==1||median_id==13||median_id==14||median_id==15||median_id==19||median_id==36||median_id==45){//ここでは正しい
+	// 	printf("2 copy_x_sort_ids[] = ");
+	// 	for(int i=0;i<group_size;i++){
+	// 		printf("%d,",copy_x_sort_ids[i]);
+	// 	}
+	// 	printf("\n");
+	// }
+
+	// printf("1");
+	if(parent_id >= 0){ // 親あり
+		free(x_sort_ids);
+		free(y_sort_ids);
+		free(z_sort_ids);
+		if(!node_is_right) nodes[parent_id].left_id = median_id;
+		if(node_is_right) nodes[parent_id].right_id = median_id;
+	}
+	else{ // 親なし
+		printf("root update\n");
+		*root_id = median_id;
+	}
+	// printf("2");
+	if(group_size > 1){ // 子あり
+		int left_group_size = 0;
+		int right_group_size = 0;
+		int *left_x_sort_ids,*left_y_sort_ids,*left_z_sort_ids;
+		int *right_x_sort_ids,*right_y_sort_ids,*right_z_sort_ids;
+		int *next_group;
+		next_group = (int *)malloc(point_size * sizeof(int));
+		left_x_sort_ids = (int *)malloc(middle * sizeof(int));
+		left_y_sort_ids = (int *)malloc(middle * sizeof(int));
+		left_z_sort_ids = (int *)malloc(middle * sizeof(int));
+		right_x_sort_ids = (int *)malloc((group_size - (middle + 1)) * sizeof(int));
+		right_y_sort_ids = (int *)malloc((group_size - (middle + 1)) * sizeof(int));
+		right_z_sort_ids = (int *)malloc((group_size - (middle + 1)) * sizeof(int));
+		int left_axis_count[3]={0,0,0};
+		int right_axis_count[3]={0,0,0};
+		// printf("\n\n\n");
+		// printf("median_id = %d\n",median_id);
+		// if(!node_is_right) printf("node is left\n");
+		// else printf("node is right\n");
+		// printf("parent_id = %d\n",parent_id);
+		// printf("middle = %d\n",middle);
+		// printf("axis = %d\n",nodes[median_id].axis);
+
+		// printf("3");
+		// printf("axis = %d",axis);
+		// if(median_id==1||median_id==14||median_id==19||median_id==36||median_id==45){//ここでは正しい
+		// 	printf("3 copy_x_sort_ids[] = ");
+		// 	for(int i=0;i<group_size;i++){
+		// 		printf("%d,",copy_x_sort_ids[i]);
+		// 	}
+		// 	printf("\n");
+		// }
+
+
+		if(axis==0){
+			// printf("for start");
+			for(int i = 0; i < group_size; i++){
+				if(point_size<copy_x_sort_ids[i]) printf("out of range copy_x_sort_ids[%d] = %d \n",i,copy_x_sort_ids[i]);
+				if(point_size<copy_y_sort_ids[i]) printf("out of range copy_y_sort_ids[%d] = %d \n",i,copy_y_sort_ids[i]);
+				if(point_size<copy_z_sort_ids[i]) printf("out of range copy_z_sort_ids[%d] = %d \n",i,copy_z_sort_ids[i]);
+				// printf("i = %d ",i);
+				// printf("middle = %d ",middle);
+				if(i<middle){
+					left_x_sort_ids[left_axis_count[0]] = copy_x_sort_ids[i];
+					// printf("3.01 ");
+					left_axis_count[0]++;
+					// printf("3.02 ");
+					// printf("parent_id = %d",parent_id);
+					// printf("copy_x_sort_ids[%d] = %d ",i,copy_x_sort_ids[i]);
+					next_group[copy_x_sort_ids[i]] = -1;
+					// printf("next_group[%d] = %d ",copy_x_sort_ids[i],next_group[copy_x_sort_ids[i]]);
+					// printf("3.1 ");
+				}
+				else if(i>middle){
+					right_x_sort_ids[right_axis_count[0]] = copy_x_sort_ids[i];
+					right_axis_count[0]++;
+					next_group[copy_x_sort_ids[i]] = 1;
+					// printf("3.3");
+				}
+				else{
+					next_group[copy_x_sort_ids[i]] = 0;
+					// printf("3.2");
+				}
+			}
+		}
+		else if(axis==1){
+			// printf("for start");
+			for(int i = 0; i < group_size; i++){
+				if(point_size<copy_x_sort_ids[i]) printf("out of range copy_x_sort_ids[%d] = %d \n",i,copy_x_sort_ids[i]);
+				if(point_size<copy_y_sort_ids[i]) printf("out of range copy_y_sort_ids[%d] = %d \n",i,copy_y_sort_ids[i]);
+				if(point_size<copy_z_sort_ids[i]) printf("out of range copy_z_sort_ids[%d] = %d \n",i,copy_z_sort_ids[i]);
+				// printf("i = %d ",i);
+				// printf("middle = %d ",middle);
+				if(i<middle){
+					left_y_sort_ids[left_axis_count[1]] = copy_y_sort_ids[i];
+					// printf("3.01 ");
+					left_axis_count[1]++;
+					// printf("3.02 ");
+					// printf("copy_y_sort_ids[%d] = %d ",i,copy_y_sort_ids[i]);
+					next_group[copy_y_sort_ids[i]] = -1;
+					// printf("next_group[%d] = %d ",copy_y_sort_ids[i],next_group[copy_y_sort_ids[i]]);
+					// printf("3.1 ");
+				}
+				else if(i>middle){
+					right_y_sort_ids[right_axis_count[1]] = copy_y_sort_ids[i];
+					right_axis_count[1]++;
+					next_group[copy_y_sort_ids[i]] = 1;
+					// printf("3.3");
+				}
+				else{
+					next_group[copy_y_sort_ids[i]] = 0;
+					// printf("3.2");
+				}
+			}
+
+		}
+		else if(axis==2){
+			// printf("for start");
+			for(int i = 0; i < group_size; i++){
+				if(point_size<copy_x_sort_ids[i]) printf("out of range copy_x_sort_ids[%d] = %d \n",i,copy_x_sort_ids[i]);
+				if(point_size<copy_y_sort_ids[i]) printf("out of range copy_y_sort_ids[%d] = %d \n",i,copy_y_sort_ids[i]);
+				if(point_size<copy_z_sort_ids[i]) printf("out of range copy_z_sort_ids[%d] = %d \n",i,copy_z_sort_ids[i]);
+				// printf("i = %d ",i);
+				// printf("middle = %d ",middle);
+				if(i<middle){
+					left_z_sort_ids[left_axis_count[2]] = copy_z_sort_ids[i];
+					// printf("3.01 ");
+					left_axis_count[2]++;
+					// printf("3.02 ");
+					// printf("copy_z_sort_ids[%d] = %d ",i,copy_z_sort_ids[i]);
+					next_group[copy_z_sort_ids[i]] = -1;
+					// printf("next_group[%d] = %d ",copy_z_sort_ids[i],next_group[copy_z_sort_ids[i]]);
+					// printf("3.1 ");
+				}
+				else if(i>middle){
+					right_z_sort_ids[right_axis_count[2]] = copy_z_sort_ids[i];
+					right_axis_count[2]++;
+					next_group[copy_z_sort_ids[i]] = 1;
+					// printf("3.3");
+				}
+				else{
+					next_group[copy_z_sort_ids[i]] = 0;
+					// printf("3.2");
+				}
+			}
+		}
+		// printf("\n");
+		// printf("4");
+		left_group_size = left_axis_count[axis];
+		right_group_size = right_axis_count[axis];
+
+		// printf("group is (");
+		// for(int i=0;i<group_size;i++){
+		// 	if(axis==0) printf("%d,",copy_x_sort_ids[i]);
+		// 	if(axis==1) printf("%d,",copy_y_sort_ids[i]);
+		// 	if(axis==2) printf("%d,",copy_z_sort_ids[i]);
+		// }
+		// printf(")");
+		// printf("left_group is (");
+		// for(int i=0;i<left_group_size;i++){
+		// 	if(axis==0) printf("%d,",left_x_sort_ids[i]);
+		// 	if(axis==1) printf("%d,",left_y_sort_ids[i]);
+		// 	if(axis==2) printf("%d,",left_z_sort_ids[i]);
+		// }
+		// printf(")");
+		// printf("right_group is (");
+		// for(int i=0;i<right_group_size;i++){
+		// 	if(axis==0) printf("%d,",right_x_sort_ids[i]);
+		// 	if(axis==1) printf("%d,",right_y_sort_ids[i]);
+		// 	if(axis==2) printf("%d,",right_z_sort_ids[i]);
+		// }
+		// printf(")");
+		// printf("\n\n\n");
+
+		for(int i = 0; i < group_size; i++){
+			for(int j = 0; j < 3; j++){
+				if(j==axis) continue;
+				if(j==0){//x実装
+					if(next_group[copy_x_sort_ids[i]] == -1){
+						left_x_sort_ids[left_axis_count[j]] = copy_x_sort_ids[i];
+						left_axis_count[j]++;
+					}
+					else if(next_group[copy_x_sort_ids[i]] == 1){
+						right_x_sort_ids[right_axis_count[j]] = copy_x_sort_ids[i];
+						right_axis_count[j]++;
+					}
+				}
+				if(j==1){//y実装
+					if(next_group[copy_y_sort_ids[i]] == -1){
+						left_y_sort_ids[left_axis_count[j]] = copy_y_sort_ids[i];
+						left_axis_count[j]++;
+					}
+					else if(next_group[copy_y_sort_ids[i]] == 1){
+						right_y_sort_ids[right_axis_count[j]] = copy_y_sort_ids[i];
+						right_axis_count[j]++;
+					}
+				}
+				if(j==2){//z実装
+					if(next_group[copy_z_sort_ids[i]] == -1){
+						left_z_sort_ids[left_axis_count[j]] = copy_z_sort_ids[i];
+						left_axis_count[j]++;
+					}
+					else if(next_group[copy_z_sort_ids[i]] == 1){
+						right_z_sort_ids[right_axis_count[j]] = copy_z_sort_ids[i];
+						right_axis_count[j]++;
+					}
+				}
+			}
+		}
+		free(copy_x_sort_ids);
+		free(copy_y_sort_ids);
+		free(copy_z_sort_ids);
+		free(next_group);
+		// printf("5");
+		// if(median_id==18) printf("Hit!!!!!!!!!!!!!!! left_x_sort_ids[16] = %d\n\n\n",left_x_sort_ids[16]);
+		// if(median_id==33) printf("Hit!!!!!!!!!!!!!!! right_x_sort_ids[16] = %d\n\n\n",right_x_sort_ids[16]);
+		// if(median_id==3145) printf("Hit!!!!!!!!!!!!!!! left_x_sort_ids[156] = %d\n\n\n",left_x_sort_ids[156]);
+		// if(median_id==3877) printf("Hit!!!!!!!!!!!!!!! left_y_sort_ids[1] = %d\n\n\n",left_x_sort_ids[1]);
+		// if(median_id==3888) printf("Hit!!!!!!!!!!!!!!! left_y_sort_ids[1] = %d\n\n\n",left_y_sort_ids[1]);
+		// cudaDeviceSynchronize();
+		if(left_group_size > 0) d_CreateNode<<<1, 1>>>(point_size,left_group_size,depth+1,median_id,false,left_x_sort_ids,left_y_sort_ids,left_z_sort_ids,root_id,nodes);
+		else {
+			free(left_x_sort_ids);
+			free(left_y_sort_ids);
+			free(left_z_sort_ids);
+		}
+		if(right_group_size > 0) d_CreateNode<<<1, 1>>>(point_size,right_group_size,depth+1,median_id,true,right_x_sort_ids,right_y_sort_ids,right_z_sort_ids,root_id,nodes);
+		else {
+			free(right_x_sort_ids);
+			free(right_y_sort_ids);
+			free(right_z_sort_ids);
+		}
+		// cudaDeviceSynchronize();
+		// free(left_x_sort_ids);
+		// free(left_y_sort_ids);
+		// free(left_z_sort_ids);
+		// free(right_x_sort_ids);
+		// free(right_y_sort_ids);
+		// free(right_z_sort_ids);
+		
+	}
+}
+
+__device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indices,int head_id,float* points,float* search_point,float range_sq)
 {
 	float dist_sq = powf(points[head_id*3+0]-search_point[0],2)+powf(points[head_id*3+1]-search_point[1],2)+powf(points[head_id*3+2]-search_point[2],2);
 	if(dist_sq<range_sq){
@@ -349,7 +628,7 @@ __device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indic
 	} 
 }
 
-__device__ int d_SearchSubTree(int *range_indices_size,int *range_indices,int root_id,node* nodes,float* points,float* search_point,float range_sq)//vectorなしpowなしで作り直す
+__device__ int d_SearchSubTree(int *range_indices_size,int *range_indices,int root_id,node* nodes,float* points,float* search_point,float range_sq)
 {
 	int head_id = root_id;
 	bool cross,next_is_right;
@@ -686,58 +965,115 @@ __global__ void NormalsGPU(long long int* neighbor_time,int *point_neighbor_size
     
 }
 
-__global__ void ChildKernel(void* data){
+// __global__ void ChildKernel(void* data)
+// {
 
-	printf("child : %d, %d\n", blockIdx.x, threadIdx.x);
+// 	printf("child : %d, %d\n", blockIdx.x, threadIdx.x);
 
-}
+// }
 
-__global__ void ParentKernel(void* data){
+// __global__ void ParentKernel(void* data)
+// {
 
-	printf("parent: %d, %d\n", blockIdx.x, threadIdx.x);
+// 	printf("parent: %d, %d\n", blockIdx.x, threadIdx.x);
 
-	ChildKernel<<<1, 2>>>(data);
-	cudaDeviceSynchronize();
+// 	ChildKernel<<<1, 2>>>(data);
+// 	cudaDeviceSynchronize();
 
-}
+// }
 
+// __global__ void KernelFunctionArgumentTypeCheck(node* nodes)
+// {
+// 	unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+//     unsigned int idx = ix;
+// 	printf("KernelFunctionArgumentTypeCheck: %d, %d\n", blockIdx.x, threadIdx.x);
+// 	for(int i=0;i<3;i++){
+// 		nodes[i].parent_id = i; nodes[i].left_id = i; nodes[i].right_id = i; nodes[i].axis = i;
+// 	}
+// }
+
+// __global__ void MyKernel(float* devPtr, size_t pitch, int width, int height)
+// {
+//   for (int r = 0; r < height; ++r) {
+//     float* row = (float*)((char*)devPtr + r * pitch);
+//     for (int c = 0; c < width; ++c) {
+//       float element = row[c];
+//     }
+//   }
+// }
 
 extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector<int>& point_neighbor,std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
 {
+	//minimum recursive function in cuda
+	// int nbytes = 1024;
+	// int *data_dev = 0;
+	// cudaMalloc((void**)&data_dev, nbytes);
+	// cudaMemset(data_dev, 255, nbytes);
+	// ParentKernel<<<1, 2>>>(data_dev);
 
-	int nbytes = 1024;
-	int *data_dev = 0;
-	cudaMalloc((void**)&data_dev, nbytes);
-	cudaMemset(data_dev, 255, nbytes);
-	ParentKernel<<<1, 2>>>(data_dev);
-	
+	//Kernel Function Argument Type Check
+	// std::vector<node> h_nodes_test(3);
+	// node *d_nodes_test;
+	// cudaMalloc((void **)&d_nodes_test, 3 * sizeof(node));
+	// KernelFunctionArgumentTypeCheck<<<1, 1>>>(d_nodes_test);
+
+	// cudaMemcpy(&h_nodes_test[0], d_nodes_test, 3 * sizeof(node), cudaMemcpyDeviceToHost);
+	// cudaFree(d_nodes_test);
+	// for(int i=0;i<3;i++){
+	// 	std::cout<<"nodes = "<<h_nodes_test[i].parent_id<<","<<h_nodes_test[i].left_id<<","<<h_nodes_test[i].right_id<<","<<h_nodes_test[i].axis<<std::endl;
+	// }
+
+	//2d確保
+	// int width = 64, height = 64;
+	// float* devPtr;
+	// size_t pitch;
+	// cudaMallocPitch(&devPtr, &pitch, width * sizeof(float), height);
+	// MyKernel<<<100, 512>>>(devPtr, pitch, width, height);
+
 	// points_array.clear();
-	// points_array.resize(7);
+	// points_array.resize(9);
 	// points_array = {{6, 0, 0}, 
 	// 				{5, 3, 0},
 	// 				{3, 4, 0},
 	// 				{4, 6, 0},
 	// 				{2, 5, 0},
 	// 				{1, 2, 0},
-	// 				{0, 1, 0}};
+	// 				{0, 1, 0},
+	// 				{0, 0, 0},
+	// 				{0, 0, 0}};
+	// points_array.resize(7);
 
-
+	// points_array.resize(77);
 	std::vector <node> nodes;
 	nodes.resize(points_array.size());
 	int root_id=-1;
 	clock_t build_start,build_end;
 	build_start = clock();
+	// if(frames==43) std::cout<<"dead point is ("<<points_array[77][0]<<","<<points_array[77][0]<<","<<points_array[77][0]<<")"<<std::endl;
+
 
 	/////////////////////////////////////////////////////////////////////////////////////////
-	// std::vector<int> root_indices(points_array.size());
+	// std::vector<std::vector<int>> axis_sort_ids(3,std::vector<int>(points_array.size()));
+	// point_with_id point_with_ids[points_array.size()];
 	// for(int i=0;i<points_array.size();i++){
-	// 	root_indices[i]=i;
+	// 	point_with_ids[i].id = i;
+	// 	point_with_ids[i].pos[0] = points_array[i][0];
+	// 	point_with_ids[i].pos[1] = points_array[i][1];
+	// 	point_with_ids[i].pos[2] = points_array[i][2];
 	// }
-	// int create_end = CreateTree(&root_id,nodes,points_array,root_indices,-1,false);
+	// for(sort_axis=0; sort_axis<3; sort_axis++){
+	// 	qsort(point_with_ids, points_array.size(), sizeof(point_with_id), AxisSort);
+	// 	for (int i=0 ; i < points_array.size() ; i++){
+	// 		axis_sort_ids[sort_axis][i]=point_with_ids[i].id;
+	// 	}
+	// }
+	// int create_end = CreateNode(&root_id,points_array.size(),nodes,axis_sort_ids,0,-1,false);
 	/////////////////////////////////////////////////////////////////////////////////////////
 
 	/////////////////////////////////////////////////////////////////////////////////////////
-	std::vector<std::vector<int>> axis_sort_ids(3,std::vector<int>(points_array.size()));
+	std::vector<int> x_sort_ids(points_array.size());
+	std::vector<int> y_sort_ids(points_array.size());
+	std::vector<int> z_sort_ids(points_array.size());
 	point_with_id point_with_ids[points_array.size()];
 	for(int i=0;i<points_array.size();i++){
 		point_with_ids[i].id = i;
@@ -748,39 +1084,44 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 	for(sort_axis=0; sort_axis<3; sort_axis++){
 		qsort(point_with_ids, points_array.size(), sizeof(point_with_id), AxisSort);
 		for (int i=0 ; i < points_array.size() ; i++){
-			axis_sort_ids[sort_axis][i]=point_with_ids[i].id;
+			if(sort_axis==0){
+				x_sort_ids[i]=point_with_ids[i].id;
+			}
+			if(sort_axis==1){
+				y_sort_ids[i]=point_with_ids[i].id;
+			}
+			if(sort_axis==2){
+				z_sort_ids[i]=point_with_ids[i].id;
+			}
 		}
 	}
-	int create_end = CreateNode(&root_id,points_array.size(),nodes,axis_sort_ids,0,-1,false);
+	int *d_x_sort_ids,*d_y_sort_ids,*d_z_sort_ids,*d_root_id;
+	node *d_nodes;
+	cudaMalloc((void **)&d_x_sort_ids, points_array.size() * sizeof(int));
+	cudaMalloc((void **)&d_y_sort_ids, points_array.size() * sizeof(int));
+	cudaMalloc((void **)&d_z_sort_ids, points_array.size() * sizeof(int));
+	cudaMalloc((void **)&d_root_id, sizeof(int));
+	cudaMalloc((void **)&d_nodes, points_array.size() * sizeof(node));
+	cudaMemcpy(d_x_sort_ids, &x_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_y_sort_ids, &y_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_z_sort_ids, &z_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	cudaDeviceSetLimit(cudaLimitStackSize, 1024*1024);
+	// std::cout << "frames" << frames <<"------------------------------------------------------------------------------------------------------------"<< std::endl;
+	d_CreateNode<<<1, 1>>>(points_array.size(),points_array.size(),0,-1,false,d_x_sort_ids,d_y_sort_ids,d_z_sort_ids,d_root_id,d_nodes);
+	cudaMemcpy(&root_id, d_root_id, sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(&nodes[0], d_nodes, points_array.size() * sizeof(node), cudaMemcpyDeviceToHost);
+	cudaFree(d_x_sort_ids);
+	cudaFree(d_y_sort_ids);
+	cudaFree(d_z_sort_ids);
+	cudaFree(d_root_id);
+	cudaFree(d_nodes);
 	/////////////////////////////////////////////////////////////////////////////////////////
 	
 	build_end = clock();
 	printf("create tree time is %.5fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
-
-	// if(first){
-	// 	if(create_end==1){
-	// 		for(int i=0;i<points_array.size();i++){
-	// 			std::cout<<"node["<<i<<"] axis = "<<nodes[i].axis<<", parent_id = "<<nodes[i].parent_id<<", left_id = "<<nodes[i].left_id<<", right_id = "<<nodes[i].right_id<<std::endl;
-	// 		}
-	// 	}
-	// } 
-
-	// std::vector<float> search_point={8,1,0};
-	// // std::vector<float> search_point={11,5,0};
-	// std::vector<int> range_indices;
-	// float range_sq = 8.5*8.5;
-	// //探索関数の実行
-	// int range_search = SearchSubTree(range_indices,root_id,nodes,points,search_point,range_sq);
-	// // std::cout<<"range_indices.size()"<<range_indices.size()<<std::endl;
-	// if(first){
-	// 	if(range_search==1) {
-	// 		std::cout<<"host range_indices is [";
-	// 		for(int i=0;i<range_indices.size();i++){
-	// 			std::cout<<range_indices[i]<<",";
-	// 		}
-	// 		std::cout<<"]"<<std::endl;
-	// 	}
-	// }
+	//root_id表示
+	std::cout << "root_id = " << root_id << std::endl;
+	//nodes表示
 
 
 	// std::cout<<"3.01"<<std::endl;
@@ -872,7 +1213,7 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
     dim3 grid((points_array.size() + block.x - 1) / block.x, 1);
     // std::cout<<"3.07"<<std::endl;
     // std::cout<<"normalsGPUstart"<<std::endl;
-    cudaDeviceSetLimit(cudaLimitStackSize, 1024*8);
+    // cudaDeviceSetLimit(cudaLimitStackSize, 1024*8);
     //実行
     NormalsGPU<<<grid,block>>>(d_neighbor_time,d_point_neighbor_size,d_point_neighbor,d_parent_ids,d_left_ids,d_right_ids,d_axes,root_id,d_points,points_array.size(),d_neighbor_points_indices,d_neighbor_start_indices,neighbor_points_count,d_normals,d_curvatures,d_covariance_compute_time,d_eigen_compute_time);
     // std::cout<<"normalsGPUend"<<std::endl;
@@ -928,4 +1269,5 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
     cudaFree(d_curvatures);
     cudaFree(d_covariance_compute_time);
     cudaFree(d_eigen_compute_time);
+	frames++;
 }
