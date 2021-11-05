@@ -29,6 +29,12 @@ typedef struct
 	int axis;
 } node;
 
+typedef struct
+{
+	int i;
+	bool ready;
+} int_with_ready;
+
 bool first=true;
 
 //	年齢(昇順)
@@ -833,7 +839,7 @@ __global__ void NormalsGPU(long long int* neighbor_time,int *point_neighbor_size
 	}
 
 
-    if(idx<point_size-1){//対象スレッド内のみ計算
+    if(idx<point_size){//対象スレッド内のみ計算
         //デバッグ用
         // if(idx==0||idx==10||idx==20) printf("points(%d) = %f,%f,%f\n",idx,points[idx*3+0],points[idx*3+1],points[idx*3+2]);
         
@@ -1002,6 +1008,41 @@ __global__ void NormalsGPU(long long int* neighbor_time,int *point_neighbor_size
 //   }
 // }
 
+__global__ void d_ParallelRecursionTest(int data_size,int_with_ready* data)
+{
+	unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int idx = ix;
+	// printf("thread[%d] is open",idx);
+	if(idx<data_size){
+		if(data[idx].ready){
+			printf("open %d thread\n",idx);
+			if(idx!=0) data[idx].i = data[idx-1].i + 1;
+			data[idx+1].ready = true;
+		}
+
+		// printf("thread[%d] is inside range\n",idx);
+		// if(idx==0 && data[idx].ready) printf("thread[0] ready = true\n");
+		// else if(idx==0) printf("thread[0] ready = false\n");
+		// if(data[idx].ready) printf("thread[%d] is ready\n",idx);
+		// while(1){
+		// 	if(idx==0){
+		// 		printf("thread[%d] id while break\n",idx);
+		// 		break;
+		// 	}
+		// 	else if(data[idx].ready){
+		// 		printf("thread[%d] id while break\n",idx);
+		// 		break;
+		// 	} 
+		// }
+		// printf("open %d thread\n",idx);
+		// if(idx!=0) data[idx].i = data[idx-1].i + 1;
+		// else data[idx].i = 0;
+		// printf("i is update\n");
+		// data[idx+1].ready = true;
+		// printf("next is ready\n");
+	}
+}
+
 extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector<int>& point_neighbor,std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
 {
 	//minimum recursive function in cuda
@@ -1016,7 +1057,6 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 	// node *d_nodes_test;
 	// cudaMalloc((void **)&d_nodes_test, 3 * sizeof(node));
 	// KernelFunctionArgumentTypeCheck<<<1, 1>>>(d_nodes_test);
-
 	// cudaMemcpy(&h_nodes_test[0], d_nodes_test, 3 * sizeof(node), cudaMemcpyDeviceToHost);
 	// cudaFree(d_nodes_test);
 	// for(int i=0;i<3;i++){
@@ -1029,6 +1069,32 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 	// size_t pitch;
 	// cudaMallocPitch(&devPtr, &pitch, width * sizeof(float), height);
 	// MyKernel<<<100, 512>>>(devPtr, pitch, width, height);
+
+	//Parallel Recursion Test
+	int data_size=10;
+	std::vector<int_with_ready> h_test_data(data_size);
+	for(int i=0;i<data_size;i++){
+		h_test_data[i].i = 0;
+		h_test_data[i].ready = false;
+	}
+	h_test_data[0].i = 0;
+	h_test_data[0].ready = true;
+	int_with_ready *d_test_data;
+	cudaMalloc((void **)&d_test_data, data_size * sizeof(int_with_ready));
+	cudaMemcpy(d_test_data, &h_test_data[0], data_size * sizeof(int_with_ready), cudaMemcpyHostToDevice);
+	int dimx_test = 32;
+    dim3 block_test(dimx_test, 1);
+    dim3 grid_test((data_size + block_test.x - 1) / block_test.x, 1);
+	//ここ繰り返す
+	for(int i=0;i<data_size;i++){
+		d_ParallelRecursionTest<<<grid_test, block_test>>>(data_size,d_test_data);
+	}
+	cudaMemcpy(&h_test_data[0], d_test_data, data_size * sizeof(int_with_ready), cudaMemcpyDeviceToHost);
+	cudaFree(d_test_data);
+
+	for(int i=0;i<data_size;i++){
+		std::cout<<"data["<<i<<"] = "<<h_test_data[i].i<<std::endl;
+	}
 
 	// points_array.clear();
 	// points_array.resize(9);
@@ -1053,27 +1119,7 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 
 
 	/////////////////////////////////////////////////////////////////////////////////////////
-	// std::vector<std::vector<int>> axis_sort_ids(3,std::vector<int>(points_array.size()));
-	// point_with_id point_with_ids[points_array.size()];
-	// for(int i=0;i<points_array.size();i++){
-	// 	point_with_ids[i].id = i;
-	// 	point_with_ids[i].pos[0] = points_array[i][0];
-	// 	point_with_ids[i].pos[1] = points_array[i][1];
-	// 	point_with_ids[i].pos[2] = points_array[i][2];
-	// }
-	// for(sort_axis=0; sort_axis<3; sort_axis++){
-	// 	qsort(point_with_ids, points_array.size(), sizeof(point_with_id), AxisSort);
-	// 	for (int i=0 ; i < points_array.size() ; i++){
-	// 		axis_sort_ids[sort_axis][i]=point_with_ids[i].id;
-	// 	}
-	// }
-	// int create_end = CreateNode(&root_id,points_array.size(),nodes,axis_sort_ids,0,-1,false);
-	/////////////////////////////////////////////////////////////////////////////////////////
-
-	/////////////////////////////////////////////////////////////////////////////////////////
-	std::vector<int> x_sort_ids(points_array.size());
-	std::vector<int> y_sort_ids(points_array.size());
-	std::vector<int> z_sort_ids(points_array.size());
+	std::vector<std::vector<int>> axis_sort_ids(3,std::vector<int>(points_array.size()));
 	point_with_id point_with_ids[points_array.size()];
 	for(int i=0;i<points_array.size();i++){
 		point_with_ids[i].id = i;
@@ -1084,43 +1130,63 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 	for(sort_axis=0; sort_axis<3; sort_axis++){
 		qsort(point_with_ids, points_array.size(), sizeof(point_with_id), AxisSort);
 		for (int i=0 ; i < points_array.size() ; i++){
-			if(sort_axis==0){
-				x_sort_ids[i]=point_with_ids[i].id;
-			}
-			if(sort_axis==1){
-				y_sort_ids[i]=point_with_ids[i].id;
-			}
-			if(sort_axis==2){
-				z_sort_ids[i]=point_with_ids[i].id;
-			}
+			axis_sort_ids[sort_axis][i]=point_with_ids[i].id;
 		}
 	}
-	int *d_x_sort_ids,*d_y_sort_ids,*d_z_sort_ids,*d_root_id;
-	node *d_nodes;
-	cudaMalloc((void **)&d_x_sort_ids, points_array.size() * sizeof(int));
-	cudaMalloc((void **)&d_y_sort_ids, points_array.size() * sizeof(int));
-	cudaMalloc((void **)&d_z_sort_ids, points_array.size() * sizeof(int));
-	cudaMalloc((void **)&d_root_id, sizeof(int));
-	cudaMalloc((void **)&d_nodes, points_array.size() * sizeof(node));
-	cudaMemcpy(d_x_sort_ids, &x_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_y_sort_ids, &y_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_z_sort_ids, &z_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
-	cudaDeviceSetLimit(cudaLimitStackSize, 1024*1024);
-	// std::cout << "frames" << frames <<"------------------------------------------------------------------------------------------------------------"<< std::endl;
-	d_CreateNode<<<1, 1>>>(points_array.size(),points_array.size(),0,-1,false,d_x_sort_ids,d_y_sort_ids,d_z_sort_ids,d_root_id,d_nodes);
-	cudaMemcpy(&root_id, d_root_id, sizeof(int), cudaMemcpyDeviceToHost);
-	cudaMemcpy(&nodes[0], d_nodes, points_array.size() * sizeof(node), cudaMemcpyDeviceToHost);
-	cudaFree(d_x_sort_ids);
-	cudaFree(d_y_sort_ids);
-	cudaFree(d_z_sort_ids);
-	cudaFree(d_root_id);
-	cudaFree(d_nodes);
+	int create_end = CreateNode(&root_id,points_array.size(),nodes,axis_sort_ids,0,-1,false);
+	/////////////////////////////////////////////////////////////////////////////////////////
+
+	/////////////////////////////////////////////////////////////////////////////////////////
+	// std::vector<int> x_sort_ids(points_array.size());
+	// std::vector<int> y_sort_ids(points_array.size());
+	// std::vector<int> z_sort_ids(points_array.size());
+	// point_with_id point_with_ids[points_array.size()];
+	// for(int i=0;i<points_array.size();i++){
+	// 	point_with_ids[i].id = i;
+	// 	point_with_ids[i].pos[0] = points_array[i][0];
+	// 	point_with_ids[i].pos[1] = points_array[i][1];
+	// 	point_with_ids[i].pos[2] = points_array[i][2];
+	// }
+	// for(sort_axis=0; sort_axis<3; sort_axis++){
+	// 	qsort(point_with_ids, points_array.size(), sizeof(point_with_id), AxisSort);
+	// 	for (int i=0 ; i < points_array.size() ; i++){
+	// 		if(sort_axis==0){
+	// 			x_sort_ids[i]=point_with_ids[i].id;
+	// 		}
+	// 		if(sort_axis==1){
+	// 			y_sort_ids[i]=point_with_ids[i].id;
+	// 		}
+	// 		if(sort_axis==2){
+	// 			z_sort_ids[i]=point_with_ids[i].id;
+	// 		}
+	// 	}
+	// }
+	// int *d_x_sort_ids,*d_y_sort_ids,*d_z_sort_ids,*d_root_id;
+	// node *d_nodes;
+	// cudaMalloc((void **)&d_x_sort_ids, points_array.size() * sizeof(int));
+	// cudaMalloc((void **)&d_y_sort_ids, points_array.size() * sizeof(int));
+	// cudaMalloc((void **)&d_z_sort_ids, points_array.size() * sizeof(int));
+	// cudaMalloc((void **)&d_root_id, sizeof(int));
+	// cudaMalloc((void **)&d_nodes, points_array.size() * sizeof(node));
+	// cudaMemcpy(d_x_sort_ids, &x_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	// cudaMemcpy(d_y_sort_ids, &y_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	// cudaMemcpy(d_z_sort_ids, &z_sort_ids[0], points_array.size() * sizeof(int), cudaMemcpyHostToDevice);
+	// cudaDeviceSetLimit(cudaLimitStackSize, 1024*1024);
+	// // std::cout << "frames" << frames <<"------------------------------------------------------------------------------------------------------------"<< std::endl;
+	// d_CreateNode<<<1, 1>>>(points_array.size(),points_array.size(),0,-1,false,d_x_sort_ids,d_y_sort_ids,d_z_sort_ids,d_root_id,d_nodes);
+	// cudaMemcpy(&root_id, d_root_id, sizeof(int), cudaMemcpyDeviceToHost);
+	// cudaMemcpy(&nodes[0], d_nodes, points_array.size() * sizeof(node), cudaMemcpyDeviceToHost);
+	// cudaFree(d_x_sort_ids);
+	// cudaFree(d_y_sort_ids);
+	// cudaFree(d_z_sort_ids);
+	// cudaFree(d_root_id);
+	// cudaFree(d_nodes);
 	/////////////////////////////////////////////////////////////////////////////////////////
 	
 	build_end = clock();
-	printf("create tree time is %.5fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
+	// printf("create tree time is %.5fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
 	//root_id表示
-	std::cout << "root_id = " << root_id << std::endl;
+	// std::cout << "root_id = " << root_id << std::endl;
 	//nodes表示
 
 
