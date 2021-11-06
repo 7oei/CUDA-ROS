@@ -7,6 +7,6 @@ Licensed under the MIT License.
   <group ns="normals">
     <node name="organized_voxel_grid_filter" pkg="organized_voxel_grid_filter" type="organized_voxel_grid_filter" output="screen" />
     <node name="kdtree_cuda" pkg="kdtree_cuda" type="kdtree_cuda" output="screen" />
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find kdtree_cuda)/rviz/kdtree.rviz"/>
+    <!-- <node pkg="rviz" type="rviz" name="rviz" args="-d $(find kdtree_cuda)/rviz/kdtree.rviz"/> -->
   </group>
 </launch>
