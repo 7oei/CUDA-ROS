@@ -785,9 +785,9 @@ __global__ void d_DepthCreateNode(int point_size,detailed_node* nodes,int* end_l
 		// if(nodes[idx].depth == 9 && limit && nodes[idx].ready) printf("layer9 limit in and ready\n");
 		// if(nodes[idx].depth == 9 && limit && (0 > end_list[idx])) printf("layer9 limit in and not end\n");
 		// if(nodes[idx].depth == 9 && nodes[idx].ready) printf("layer9 ready\n");
-		if(/*limit && */(nodes[idx].ready && (0 > end_list[idx]))){//該当ノード
+		if(/*limit && */(nodes[idx].ready && (0 == end_list[idx]))){//該当ノード
 			// if(nodes[idx].depth == 9) printf("in\n");
-			printf("median_id = %d \n",idx);
+			// printf("median_id = %d \n",idx);
 			// printf("\n\n\n");
 			// printf("\nmedian_id = %d\n",idx);特異
 			// if(!nodes[idx].node_is_right) printf("node is left\n");
@@ -879,10 +879,10 @@ __global__ void d_DepthCreateNode(int point_size,detailed_node* nodes,int* end_l
 						}
 					}
 				}
-				cudaDeviceSynchronize();
+				// cudaDeviceSynchronize();
 				// printf("depth = %d\n",nodes[idx].depth);
 				// printf("median_id = %d \n",idx);
-				cudaDeviceSynchronize();
+				// cudaDeviceSynchronize();
 				// if(nodes[idx].depth==9) printf("section1 idx = %d\n",idx);
 				// if(idx==3040) printf("section1 idx = %d\n",idx);
 				// printf("1 ");
@@ -924,7 +924,7 @@ __global__ void d_DepthCreateNode(int point_size,detailed_node* nodes,int* end_l
 						}
 					}
 				}
-				cudaDeviceSynchronize();
+				// cudaDeviceSynchronize();
 				// if(nodes[idx].depth==9) printf("section2 idx = %d\n",idx);
 				// if(idx==3040) printf("section2 idx = %d\n",idx);
 				// printf("2 ");
@@ -970,7 +970,7 @@ __global__ void d_DepthCreateNode(int point_size,detailed_node* nodes,int* end_l
 					nodes[right_median_id].y_sort_ids = right_y_sort_ids;
 					nodes[right_median_id].z_sort_ids = right_z_sort_ids;
 				}
-				cudaDeviceSynchronize();
+				// cudaDeviceSynchronize();
 				// if(nodes[idx].depth==9) printf("section3 idx = %d\n",idx);
 				// if(idx==3040) printf("section3 idx = %d\n",idx);
 				// printf("3 ");
@@ -980,15 +980,211 @@ __global__ void d_DepthCreateNode(int point_size,detailed_node* nodes,int* end_l
 				free(nodes[idx].y_sort_ids);
 				free(nodes[idx].z_sort_ids);
 			}
-			cudaDeviceSynchronize();
+			// cudaDeviceSynchronize();
 			// if(nodes[idx].depth==9) printf("section4 idx = %d\n",idx);
 			// if(idx==3040) printf("section4 idx = %d\n",idx);
 			// printf("4 ");
 			end_list[idx] = 1;
-			cudaDeviceSynchronize();
+			// cudaDeviceSynchronize();
 			// printf("5 ");
 			// if(idx==3040) printf("section5 idx = %d\n",idx);
 			// if(nodes[idx].depth==9) printf("end idx = %d\n",idx);
+		}
+	}
+}
+
+__global__ void d_DepthCreateNodeLWD(int point_size,int *next_start_thread_id,int *next_layer_run,detailed_node* nodes,int* end_list)
+{
+    unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int idx = ix;
+	if(idx < point_size){//計算領域
+		int layer_index = idx - *next_start_thread_id;
+		int median_id = -1;
+		int layer_size = 0;
+		if(layer_index >= 0){
+			for(int i=0;i<point_size;i++){
+				if(next_layer_run[i]==1){
+					if(layer_size == layer_index) median_id = i;
+					layer_size++;
+				}
+			}
+		}
+		if(median_id >= 0) next_layer_run[median_id] = 0;
+		if((median_id >= 0) && (*next_start_thread_id <= idx) && (idx < (*next_start_thread_id + layer_size))){//該当ノード
+			printf("median_id = %d \n",median_id);
+			nodes[median_id].left_id = -1;
+			nodes[median_id].right_id = -1;
+			if(nodes[median_id].group_size>1){//子あり
+				int left_group_size = 0;
+				int right_group_size = 0;
+				int *left_x_sort_ids,*left_y_sort_ids,*left_z_sort_ids;
+				int *right_x_sort_ids,*right_y_sort_ids,*right_z_sort_ids;
+				int *next_group;
+				next_group = (int *)malloc(point_size * sizeof(int));
+				left_x_sort_ids = (int *)malloc(nodes[median_id].middle * sizeof(int));
+				left_y_sort_ids = (int *)malloc(nodes[median_id].middle * sizeof(int));
+				left_z_sort_ids = (int *)malloc(nodes[median_id].middle * sizeof(int));
+				right_x_sort_ids = (int *)malloc((nodes[median_id].group_size - (nodes[median_id].middle + 1)) * sizeof(int));
+				right_y_sort_ids = (int *)malloc((nodes[median_id].group_size - (nodes[median_id].middle + 1)) * sizeof(int));
+				right_z_sort_ids = (int *)malloc((nodes[median_id].group_size - (nodes[median_id].middle + 1)) * sizeof(int));
+				int left_axis_count[3]={0,0,0};
+				int right_axis_count[3]={0,0,0};
+
+				if(nodes[median_id].axis==0){
+					for(int i = 0; i < nodes[median_id].group_size; i++){
+						if(point_size<nodes[median_id].x_sort_ids[i]) printf("out of range nodes[median_id].x_sort_ids[%d] = %d \n",i,nodes[median_id].x_sort_ids[i]);
+						if(point_size<nodes[median_id].y_sort_ids[i]) printf("out of range nodes[median_id].y_sort_ids[%d] = %d \n",i,nodes[median_id].y_sort_ids[i]);
+						if(point_size<nodes[median_id].z_sort_ids[i]) printf("out of range nodes[median_id].z_sort_ids[%d] = %d \n",i,nodes[median_id].z_sort_ids[i]);
+						if(i<nodes[median_id].middle){
+							left_x_sort_ids[left_axis_count[0]] = nodes[median_id].x_sort_ids[i];
+							left_axis_count[0]++;
+							next_group[nodes[median_id].x_sort_ids[i]] = -1;
+						}
+						else if(i>nodes[median_id].middle){
+							right_x_sort_ids[right_axis_count[0]] = nodes[median_id].x_sort_ids[i];
+							right_axis_count[0]++;
+							next_group[nodes[median_id].x_sort_ids[i]] = 1;
+						}
+						else{
+							next_group[nodes[median_id].x_sort_ids[i]] = 0;
+						}
+					}
+				}
+				else if(nodes[median_id].axis==1){
+					for(int i = 0; i < nodes[median_id].group_size; i++){
+						if(point_size<nodes[median_id].x_sort_ids[i]) printf("out of range nodes[median_id].x_sort_ids[%d] = %d \n",i,nodes[median_id].x_sort_ids[i]);
+						if(point_size<nodes[median_id].y_sort_ids[i]) printf("out of range nodes[median_id].y_sort_ids[%d] = %d \n",i,nodes[median_id].y_sort_ids[i]);
+						if(point_size<nodes[median_id].z_sort_ids[i]) printf("out of range nodes[median_id].z_sort_ids[%d] = %d \n",i,nodes[median_id].z_sort_ids[i]);
+						if(i<nodes[median_id].middle){
+							left_y_sort_ids[left_axis_count[1]] = nodes[median_id].y_sort_ids[i];
+							left_axis_count[1]++;
+							next_group[nodes[median_id].y_sort_ids[i]] = -1;
+						}
+						else if(i>nodes[median_id].middle){
+							right_y_sort_ids[right_axis_count[1]] = nodes[median_id].y_sort_ids[i];
+							right_axis_count[1]++;
+							next_group[nodes[median_id].y_sort_ids[i]] = 1;
+						}
+						else{
+							next_group[nodes[median_id].y_sort_ids[i]] = 0;
+						}
+					}
+
+				}
+				else if(nodes[median_id].axis==2){
+					for(int i = 0; i < nodes[median_id].group_size; i++){
+						if(point_size<nodes[median_id].x_sort_ids[i]) printf("out of range nodes[median_id].x_sort_ids[%d] = %d \n",i,nodes[median_id].x_sort_ids[i]);
+						if(point_size<nodes[median_id].y_sort_ids[i]) printf("out of range nodes[median_id].y_sort_ids[%d] = %d \n",i,nodes[median_id].y_sort_ids[i]);
+						if(point_size<nodes[median_id].z_sort_ids[i]) printf("out of range nodes[median_id].z_sort_ids[%d] = %d \n",i,nodes[median_id].z_sort_ids[i]);
+						if(i<nodes[median_id].middle){
+							left_z_sort_ids[left_axis_count[2]] = nodes[median_id].z_sort_ids[i];
+							left_axis_count[2]++;
+							next_group[nodes[median_id].z_sort_ids[i]] = -1;
+						}
+						else if(i>nodes[median_id].middle){
+							right_z_sort_ids[right_axis_count[2]] = nodes[median_id].z_sort_ids[i];
+							right_axis_count[2]++;
+							next_group[nodes[median_id].z_sort_ids[i]] = 1;
+						}
+						else{
+							next_group[nodes[median_id].z_sort_ids[i]] = 0;
+						}
+					}
+				}
+				left_group_size = left_axis_count[nodes[median_id].axis];
+				right_group_size = right_axis_count[nodes[median_id].axis];
+
+				for(int i = 0; i < nodes[median_id].group_size; i++){
+					for(int j = 0; j < 3; j++){
+						if(j==nodes[median_id].axis) continue;
+						if(j==0){//x実装
+							if(next_group[nodes[median_id].x_sort_ids[i]] == -1){
+								left_x_sort_ids[left_axis_count[j]] = nodes[median_id].x_sort_ids[i];
+								left_axis_count[j]++;
+							}
+							else if(next_group[nodes[median_id].x_sort_ids[i]] == 1){
+								right_x_sort_ids[right_axis_count[j]] = nodes[median_id].x_sort_ids[i];
+								right_axis_count[j]++;
+							}
+						}
+						if(j==1){//y実装
+							if(next_group[nodes[median_id].y_sort_ids[i]] == -1){
+								left_y_sort_ids[left_axis_count[j]] = nodes[median_id].y_sort_ids[i];
+								left_axis_count[j]++;
+							}
+							else if(next_group[nodes[median_id].y_sort_ids[i]] == 1){
+								right_y_sort_ids[right_axis_count[j]] = nodes[median_id].y_sort_ids[i];
+								right_axis_count[j]++;
+							}
+						}
+						if(j==2){//z実装
+							if(next_group[nodes[median_id].z_sort_ids[i]] == -1){
+								left_z_sort_ids[left_axis_count[j]] = nodes[median_id].z_sort_ids[i];
+								left_axis_count[j]++;
+							}
+							else if(next_group[nodes[median_id].z_sort_ids[i]] == 1){
+								right_z_sort_ids[right_axis_count[j]] = nodes[median_id].z_sort_ids[i];
+								right_axis_count[j]++;
+							}
+						}
+					}
+				}
+				free(next_group);
+				int next_axis = (nodes[median_id].depth + 1) % 3;
+				if(left_group_size > 0){
+					size_t left_middle = ((left_group_size - 1) / 2);
+					int left_median_id;
+					if(next_axis == 0) left_median_id = left_x_sort_ids[left_middle];
+					if(next_axis == 1) left_median_id = left_y_sort_ids[left_middle];
+					if(next_axis == 2) left_median_id = left_z_sort_ids[left_middle];
+
+					next_layer_run[left_median_id] = 1;
+
+					nodes[median_id].left_id = left_median_id;
+
+					nodes[left_median_id].ready = true;
+					nodes[left_median_id].node_is_right = false;
+					nodes[left_median_id].parent_id = median_id;
+					nodes[left_median_id].depth = nodes[median_id].depth + 1;
+					nodes[left_median_id].axis = next_axis;
+					nodes[left_median_id].middle = left_middle;
+					nodes[left_median_id].group_size = left_group_size;
+					nodes[left_median_id].x_sort_ids = left_x_sort_ids;
+					nodes[left_median_id].y_sort_ids = left_y_sort_ids;
+					nodes[left_median_id].z_sort_ids = left_z_sort_ids;
+				}
+				if(right_group_size > 0){
+					size_t right_middle = ((right_group_size - 1) / 2);
+					int right_median_id;
+					if(next_axis == 0) right_median_id = right_x_sort_ids[right_middle];
+					if(next_axis == 1) right_median_id = right_y_sort_ids[right_middle];
+					if(next_axis == 2) right_median_id = right_z_sort_ids[right_middle];
+
+					next_layer_run[right_median_id] = 1;
+
+					nodes[median_id].right_id = right_median_id;
+
+					nodes[right_median_id].ready = true;
+					nodes[right_median_id].node_is_right = true;
+					nodes[right_median_id].parent_id = median_id;
+					nodes[right_median_id].depth = nodes[median_id].depth + 1;
+					nodes[right_median_id].axis = next_axis;
+					nodes[right_median_id].middle = right_middle;
+					nodes[right_median_id].group_size = right_group_size;
+					nodes[right_median_id].x_sort_ids = right_x_sort_ids;
+					nodes[right_median_id].y_sort_ids = right_y_sort_ids;
+					nodes[right_median_id].z_sort_ids = right_z_sort_ids;
+				}
+			}
+			if(nodes[median_id].parent_id >= 0){//親あり
+				free(nodes[median_id].x_sort_ids);
+				free(nodes[median_id].y_sort_ids);
+				free(nodes[median_id].z_sort_ids);
+			}
+			end_list[median_id] = 1;
+			if(idx==*next_start_thread_id){
+				*next_start_thread_id += layer_size;
+			}
 		}
 	}
 }
@@ -1510,7 +1706,7 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 	if(first){
 		// int test_size = 4928;
 		// std::vector<std::vector<float>> test_points(test_size);
-		
+
 		std::vector<std::vector<float>> test_points;
 		std::copy(points_array.begin(), points_array.end(), std::back_inserter(test_points));
 		//CPU
@@ -1534,12 +1730,15 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 		// int cpu_create_end = CreateNode2(&cpu_root_id,test_points.size(),cpu_nodes,cpu_axis_sort_ids,0,-1,false);
 
 		//GPU
+		build_start = clock();
 		std::vector <detailed_node> detailed_nodes;
 		detailed_nodes.resize(test_points.size());
 		std::vector<int> x_sort_ids(test_points.size());
 		std::vector<int> y_sort_ids(test_points.size());
 		std::vector<int> z_sort_ids(test_points.size());
+		std::vector<int> next_layer_run(test_points.size());
 		std::vector<int> end_list(test_points.size());
+		int next_start_thread_id = 0;
 
 		// point_with_id point_with_ids[test_points.size()];
 		for(int i=0;i<test_points.size();i++){
@@ -1548,7 +1747,8 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 			point_with_ids[i].pos[1] = test_points[i][1];
 			point_with_ids[i].pos[2] = test_points[i][2];
 			detailed_nodes[i].ready = false;
-			end_list[i] = -1;
+			next_layer_run[i] = 0;
+			end_list[i] = 0;
 		}
 		for(sort_axis=0; sort_axis<3; sort_axis++){
 			qsort(point_with_ids, test_points.size(), sizeof(point_with_id), AxisSort);
@@ -1568,6 +1768,8 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 		size_t root_middle = ((test_points.size() - 1) / 2);
 		int root_median_id = x_sort_ids[root_middle];//最初はx
 
+		next_layer_run[root_median_id] = 1;
+
 		detailed_nodes[root_median_id].ready = true;
 		detailed_nodes[root_median_id].node_is_right = false;
 		detailed_nodes[root_median_id].parent_id = -1;
@@ -1576,19 +1778,23 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 		detailed_nodes[root_median_id].middle = root_middle;
 		detailed_nodes[root_median_id].group_size = test_points.size();
 
-		int *d_end_list;
+		int *d_end_list,*d_next_layer_run,*d_next_start_thread_id;
 		detailed_node *d_detailed_nodes;
 		cudaMalloc((void **)&detailed_nodes[root_median_id].x_sort_ids, test_points.size() * sizeof(int));
 		cudaMalloc((void **)&detailed_nodes[root_median_id].y_sort_ids, test_points.size() * sizeof(int));
 		cudaMalloc((void **)&detailed_nodes[root_median_id].z_sort_ids, test_points.size() * sizeof(int));
 		cudaMalloc((void **)&d_end_list, test_points.size() * sizeof(int));
 		cudaMalloc((void **)&d_detailed_nodes, test_points.size() * sizeof(detailed_node));
+		cudaMalloc((void **)&d_next_layer_run, test_points.size() * sizeof(int));
+		cudaMalloc((void **)&d_next_start_thread_id, sizeof(int));
 
 		cudaMemcpy(detailed_nodes[root_median_id].x_sort_ids, &x_sort_ids[0], test_points.size() * sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(detailed_nodes[root_median_id].y_sort_ids, &y_sort_ids[0], test_points.size() * sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(detailed_nodes[root_median_id].z_sort_ids, &z_sort_ids[0], test_points.size() * sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(d_end_list, &end_list[0], test_points.size() * sizeof(int), cudaMemcpyHostToDevice);
 		cudaMemcpy(d_detailed_nodes, &detailed_nodes[0], test_points.size() * sizeof(detailed_node), cudaMemcpyHostToDevice);
+		cudaMemcpy(d_next_layer_run, &next_layer_run[0], test_points.size() * sizeof(int), cudaMemcpyHostToDevice);
+		cudaMemcpy(d_next_start_thread_id, &next_start_thread_id, sizeof(int), cudaMemcpyHostToDevice);
 		cudaDeviceSetLimit(cudaLimitMallocHeapSize, 1024*1024*64);//5000pointで16で死ぬので64が最適
 		// cudaDeviceSetLimit(cudaLimitStackSize, 1024);//並列ならいらん
 		int dimx_create_node = 32;//32
@@ -1622,7 +1828,9 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 			// if(depth_count==test_points.size()) break;
 			// std::cout<<"call depth = "<< depth_count <<std::endl;
 			// std::cout<<"create kernel start"<<std::endl;
-			d_DepthCreateNode<<<grid_create_node,block_create_node>>>(test_points.size(),d_detailed_nodes,d_end_list);
+			// d_DepthCreateNode<<<grid_create_node,block_create_node>>>(test_points.size(),d_detailed_nodes,d_end_list);
+			d_DepthCreateNodeLWD<<<grid_create_node,block_create_node>>>(test_points.size(),d_next_start_thread_id,d_next_layer_run,d_detailed_nodes,d_end_list);
+			cudaDeviceSynchronize();
 			// std::cout<<"create kernel end"<<std::endl;
 			if(depth_count >= (estimate_depth*2)){//*2で基本的に終わる(カバー領域は指数関数的に増えるため安心してok)
 				// std::cout<<"limit termination"<<std::endl;
@@ -1637,22 +1845,18 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 		
 		//これ以降に遅くしてるやつがいる
 		// 犯人はmemcpy
-		build_start = clock();
+		
 		cudaFree(detailed_nodes[root_median_id].x_sort_ids);
 		cudaFree(detailed_nodes[root_median_id].y_sort_ids);
 		cudaFree(detailed_nodes[root_median_id].z_sort_ids);
 
-
 		cudaMemcpy(&end_list[0], d_end_list, test_points.size() * sizeof(int), cudaMemcpyDeviceToHost);
 		cudaMemcpy(&detailed_nodes[0], d_detailed_nodes, test_points.size() * sizeof(detailed_node), cudaMemcpyDeviceToHost);
-		build_end = clock();
-
-		
-
-		
 
 		cudaFree(d_end_list);
 		cudaFree(d_detailed_nodes);
+		cudaFree(d_next_start_thread_id);
+		cudaFree(d_next_layer_run);
 		
 		// bool all_end = std::all_of(end_list.begin(), end_list.end(), [](int end) { return 0 < end; });
 		// if(all_end) std::cout<<"successful termination"<<std::endl;
@@ -1667,7 +1871,7 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 
 	/////////////////////////////////////////////////////////////////////////////////////////施工
 	
-	
+	build_end = clock();
 	printf("create tree time is %.5fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
 	//root_id表示
 	// std::cout << "root_id = " << root_id << std::endl;
