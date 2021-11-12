@@ -993,6 +993,183 @@ __global__ void d_DepthCreateNode(int point_size,detailed_node* nodes,int* end_l
 	}
 }
 
+__global__ void d_DepthCreateNodeMS(int point_size,detailed_node* nodes,int* end_list)
+{
+    unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int idx = ix;
+	if(idx < point_size){//計算領域
+		if(/*limit && */(nodes[idx].ready && (0 > end_list[idx]))){//該当ノード
+			printf("median_id = %d \n",idx);
+			nodes[idx].left_id = -1;
+			nodes[idx].right_id = -1;
+			if(nodes[idx].group_size>1){//子あり
+				int left_group_size = 0;
+				int right_group_size = 0;
+				int *left_x_sort_ids,*left_y_sort_ids,*left_z_sort_ids;
+				int *right_x_sort_ids,*right_y_sort_ids,*right_z_sort_ids;
+				int *next_group;
+				next_group = (int *)malloc(point_size * sizeof(int));
+				left_x_sort_ids = (int *)malloc(nodes[idx].middle * sizeof(int));
+				left_y_sort_ids = (int *)malloc(nodes[idx].middle * sizeof(int));
+				left_z_sort_ids = (int *)malloc(nodes[idx].middle * sizeof(int));
+				right_x_sort_ids = (int *)malloc((nodes[idx].group_size - (nodes[idx].middle + 1)) * sizeof(int));
+				right_y_sort_ids = (int *)malloc((nodes[idx].group_size - (nodes[idx].middle + 1)) * sizeof(int));
+				right_z_sort_ids = (int *)malloc((nodes[idx].group_size - (nodes[idx].middle + 1)) * sizeof(int));
+				int left_axis_count[3]={0,0,0};
+				int right_axis_count[3]={0,0,0};
+
+				if(nodes[idx].axis==0){
+					for(int i = 0; i < nodes[idx].group_size; i++){
+						if(point_size<nodes[idx].x_sort_ids[i]) printf("out of range nodes[idx].x_sort_ids[%d] = %d \n",i,nodes[idx].x_sort_ids[i]);
+						if(point_size<nodes[idx].y_sort_ids[i]) printf("out of range nodes[idx].y_sort_ids[%d] = %d \n",i,nodes[idx].y_sort_ids[i]);
+						if(point_size<nodes[idx].z_sort_ids[i]) printf("out of range nodes[idx].z_sort_ids[%d] = %d \n",i,nodes[idx].z_sort_ids[i]);
+						if(i<nodes[idx].middle){
+							left_x_sort_ids[left_axis_count[0]] = nodes[idx].x_sort_ids[i];
+							left_axis_count[0]++;
+							next_group[nodes[idx].x_sort_ids[i]] = -1;
+						}
+						else if(i>nodes[idx].middle){
+							right_x_sort_ids[right_axis_count[0]] = nodes[idx].x_sort_ids[i];
+							right_axis_count[0]++;
+							next_group[nodes[idx].x_sort_ids[i]] = 1;
+						}
+						else{
+							next_group[nodes[idx].x_sort_ids[i]] = 0;
+						}
+					}
+				}
+				else if(nodes[idx].axis==1){
+					for(int i = 0; i < nodes[idx].group_size; i++){
+						if(point_size<nodes[idx].x_sort_ids[i]) printf("out of range nodes[idx].x_sort_ids[%d] = %d \n",i,nodes[idx].x_sort_ids[i]);
+						if(point_size<nodes[idx].y_sort_ids[i]) printf("out of range nodes[idx].y_sort_ids[%d] = %d \n",i,nodes[idx].y_sort_ids[i]);
+						if(point_size<nodes[idx].z_sort_ids[i]) printf("out of range nodes[idx].z_sort_ids[%d] = %d \n",i,nodes[idx].z_sort_ids[i]);
+						if(i<nodes[idx].middle){
+							left_y_sort_ids[left_axis_count[1]] = nodes[idx].y_sort_ids[i];
+							left_axis_count[1]++;
+							next_group[nodes[idx].y_sort_ids[i]] = -1;
+						}
+						else if(i>nodes[idx].middle){
+							right_y_sort_ids[right_axis_count[1]] = nodes[idx].y_sort_ids[i];
+							right_axis_count[1]++;
+							next_group[nodes[idx].y_sort_ids[i]] = 1;
+						}
+						else{
+							next_group[nodes[idx].y_sort_ids[i]] = 0;
+						}
+					}
+
+				}
+				else if(nodes[idx].axis==2){
+					for(int i = 0; i < nodes[idx].group_size; i++){
+						if(point_size<nodes[idx].x_sort_ids[i]) printf("out of range nodes[idx].x_sort_ids[%d] = %d \n",i,nodes[idx].x_sort_ids[i]);
+						if(point_size<nodes[idx].y_sort_ids[i]) printf("out of range nodes[idx].y_sort_ids[%d] = %d \n",i,nodes[idx].y_sort_ids[i]);
+						if(point_size<nodes[idx].z_sort_ids[i]) printf("out of range nodes[idx].z_sort_ids[%d] = %d \n",i,nodes[idx].z_sort_ids[i]);
+						if(i<nodes[idx].middle){
+							left_z_sort_ids[left_axis_count[2]] = nodes[idx].z_sort_ids[i];
+							left_axis_count[2]++;
+							next_group[nodes[idx].z_sort_ids[i]] = -1;
+						}
+						else if(i>nodes[idx].middle){
+							right_z_sort_ids[right_axis_count[2]] = nodes[idx].z_sort_ids[i];
+							right_axis_count[2]++;
+							next_group[nodes[idx].z_sort_ids[i]] = 1;
+						}
+						else{
+							next_group[nodes[idx].z_sort_ids[i]] = 0;
+						}
+					}
+				}
+				left_group_size = left_axis_count[nodes[idx].axis];
+				right_group_size = right_axis_count[nodes[idx].axis];
+
+				for(int i = 0; i < nodes[idx].group_size; i++){
+					for(int j = 0; j < 3; j++){
+						if(j==nodes[idx].axis) continue;
+						if(j==0){//x実装
+							if(next_group[nodes[idx].x_sort_ids[i]] == -1){
+								left_x_sort_ids[left_axis_count[j]] = nodes[idx].x_sort_ids[i];
+								left_axis_count[j]++;
+							}
+							else if(next_group[nodes[idx].x_sort_ids[i]] == 1){
+								right_x_sort_ids[right_axis_count[j]] = nodes[idx].x_sort_ids[i];
+								right_axis_count[j]++;
+							}
+						}
+						if(j==1){//y実装
+							if(next_group[nodes[idx].y_sort_ids[i]] == -1){
+								left_y_sort_ids[left_axis_count[j]] = nodes[idx].y_sort_ids[i];
+								left_axis_count[j]++;
+							}
+							else if(next_group[nodes[idx].y_sort_ids[i]] == 1){
+								right_y_sort_ids[right_axis_count[j]] = nodes[idx].y_sort_ids[i];
+								right_axis_count[j]++;
+							}
+						}
+						if(j==2){//z実装
+							if(next_group[nodes[idx].z_sort_ids[i]] == -1){
+								left_z_sort_ids[left_axis_count[j]] = nodes[idx].z_sort_ids[i];
+								left_axis_count[j]++;
+							}
+							else if(next_group[nodes[idx].z_sort_ids[i]] == 1){
+								right_z_sort_ids[right_axis_count[j]] = nodes[idx].z_sort_ids[i];
+								right_axis_count[j]++;
+							}
+						}
+					}
+				}
+				free(next_group);
+				int next_axis = (nodes[idx].depth + 1) % 3;
+				if(left_group_size > 0){
+					size_t left_middle = ((left_group_size - 1) / 2);
+					int left_median_id;
+					if(next_axis == 0) left_median_id = left_x_sort_ids[left_middle];
+					if(next_axis == 1) left_median_id = left_y_sort_ids[left_middle];
+					if(next_axis == 2) left_median_id = left_z_sort_ids[left_middle];
+
+					nodes[idx].left_id = left_median_id;
+
+					nodes[left_median_id].ready = true;
+					nodes[left_median_id].node_is_right = false;
+					nodes[left_median_id].parent_id = idx;
+					nodes[left_median_id].depth = nodes[idx].depth + 1;
+					nodes[left_median_id].axis = next_axis;
+					nodes[left_median_id].middle = left_middle;
+					nodes[left_median_id].group_size = left_group_size;
+					nodes[left_median_id].x_sort_ids = left_x_sort_ids;
+					nodes[left_median_id].y_sort_ids = left_y_sort_ids;
+					nodes[left_median_id].z_sort_ids = left_z_sort_ids;
+				}
+				if(right_group_size > 0){
+					size_t right_middle = ((right_group_size - 1) / 2);
+					int right_median_id;
+					if(next_axis == 0) right_median_id = right_x_sort_ids[right_middle];
+					if(next_axis == 1) right_median_id = right_y_sort_ids[right_middle];
+					if(next_axis == 2) right_median_id = right_z_sort_ids[right_middle];
+
+					nodes[idx].right_id = right_median_id;
+
+					nodes[right_median_id].ready = true;
+					nodes[right_median_id].node_is_right = true;
+					nodes[right_median_id].parent_id = idx;
+					nodes[right_median_id].depth = nodes[idx].depth + 1;
+					nodes[right_median_id].axis = next_axis;
+					nodes[right_median_id].middle = right_middle;
+					nodes[right_median_id].group_size = right_group_size;
+					nodes[right_median_id].x_sort_ids = right_x_sort_ids;
+					nodes[right_median_id].y_sort_ids = right_y_sort_ids;
+					nodes[right_median_id].z_sort_ids = right_z_sort_ids;
+				}
+			}
+			if(nodes[idx].parent_id >= 0){//親あり
+				free(nodes[idx].x_sort_ids);
+				free(nodes[idx].y_sort_ids);
+				free(nodes[idx].z_sort_ids);
+			}
+			end_list[idx] = 1;
+		}
+	}
+}
+
 __device__ void d_PointRangeCheckAndAdd(int *range_indices_size,int *range_indices,int head_id,float* points,float* search_point,float range_sq)
 {
 	float dist_sq = powf(points[head_id*3+0]-search_point[0],2)+powf(points[head_id*3+1]-search_point[1],2)+powf(points[head_id*3+2]-search_point[2],2);
@@ -1392,77 +1569,10 @@ __global__ void NormalsGPU(/*detailed_node* detailed_nodes,*/long long int* neig
     
 }
 
-// __global__ void ChildKernel(void* data)
-// {
-
-// 	printf("child : %d, %d\n", blockIdx.x, threadIdx.x);
-
-// }
-
-// __global__ void ParentKernel(void* data)
-// {
-
-// 	printf("parent: %d, %d\n", blockIdx.x, threadIdx.x);
-
-// 	ChildKernel<<<1, 2>>>(data);
-// 	cudaDeviceSynchronize();
-
-// }
-
-// __global__ void KernelFunctionArgumentTypeCheck(node* nodes)
-// {
-// 	unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
-//     unsigned int idx = ix;
-// 	printf("KernelFunctionArgumentTypeCheck: %d, %d\n", blockIdx.x, threadIdx.x);
-// 	for(int i=0;i<3;i++){
-// 		nodes[i].parent_id = i; nodes[i].left_id = i; nodes[i].right_id = i; nodes[i].axis = i;
-// 	}
-// }
-
-// __global__ void MyKernel(float* devPtr, size_t pitch, int width, int height)
-// {
-//   for (int r = 0; r < height; ++r) {
-//     float* row = (float*)((char*)devPtr + r * pitch);
-//     for (int c = 0; c < width; ++c) {
-//       float element = row[c];
-//     }
-//   }
-// }
-
-// __global__ void d_ParallelRecursionTest(int data_size,int_with_ready* data)
-// {
-// 	unsigned int ix = threadIdx.x + blockIdx.x * blockDim.x;
-//     unsigned int idx = ix;
-// 	if(idx<data_size){
-// 		if(data[idx].ready){
-// 			if(idx!=0) data[idx].i = data[idx-1].i + 1;
-// 			data[idx+1].ready = true;
-// 		}
-// 	}
-// }
-
 extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector<int>& point_neighbor,std::vector<std::vector<float>> points_array,std::vector<std::vector<int>> neighbor_points_indices,std::vector<int> neighbor_start_indices,int neighbor_points_count,std::vector<std::vector<float>>& normals_array,std::vector<float>& curvatures_array,std::vector<long long int>& covariance_compute_time,std::vector<long long int>& eigen_compute_time)
 {
 
-
-	// points_array.clear();
-	// points_array.resize(8);
-	// points_array = {{6, 0, 0}, 
-	// 				{5, 3, 0},
-	// 				{3, 4, 0},
-	// 				{4, 6, 0},
-	// 				{2, 5, 0},
-	// 				{1, 2, 0},
-	// 				{0, 1, 0},
-	// 				{-3.21161e+38,4.57384e-41,-3.21161e+38}};
-	// // points_array.resize(7);
-
-	// int test_size = 684;
-	// if(points_array.size()>test_size) points_array.resize(test_size);
-
 	clock_t build_start,build_end;
-	// build_start = clock();
-	// if(frames==43) std::cout<<"dead point is ("<<points_array[77][0]<<","<<points_array[77][0]<<","<<points_array[77][0]<<")"<<std::endl;
 
 	
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -1508,9 +1618,7 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 
 
 	if(first){
-		// int test_size = 4928;
-		// std::vector<std::vector<float>> test_points(test_size);
-		
+		build_start = clock();
 		std::vector<std::vector<float>> test_points;
 		std::copy(points_array.begin(), points_array.end(), std::back_inserter(test_points));
 		//CPU
@@ -1541,7 +1649,6 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 		std::vector<int> z_sort_ids(test_points.size());
 		std::vector<int> end_list(test_points.size());
 
-		// point_with_id point_with_ids[test_points.size()];
 		for(int i=0;i<test_points.size();i++){
 			point_with_ids[i].id = i;
 			point_with_ids[i].pos[0] = test_points[i][0];
@@ -1598,9 +1705,6 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 		int depth_count = 0;
 
 		// std::cout << "frames" << frames <<"------------------------------------------------------------------------------------------------------------"<< std::endl;
-		// if(frames==114) std::cout<<"dead point is ("<<test_points[684][0]<<","<<test_points[684][1]<<","<<test_points[684][2]<<")"<<std::endl;
-		// if(frames==114) std::cout<<"around point is ("<<test_points[683][0]<<","<<test_points[683][1]<<","<<test_points[683][2]<<")"<<std::endl;
-		// if(frames==114) std::cout<<"around point is ("<<test_points[682][0]<<","<<test_points[682][1]<<","<<test_points[682][2]<<")"<<std::endl;
 
 		// if(frames==114){
 		// 	std::cout<<"test_points = {";
@@ -1619,7 +1723,6 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 		// std::cout<<"estimate_depth = "<<estimate_depth<<std::endl;
 		
 		while(1){
-			// if(depth_count==test_points.size()) break;
 			// std::cout<<"call depth = "<< depth_count <<std::endl;
 			// std::cout<<"create kernel start"<<std::endl;
 			d_DepthCreateNode<<<grid_create_node,block_create_node>>>(test_points.size(),d_detailed_nodes,d_end_list);
@@ -1634,23 +1737,13 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 			// if(all_end) break;
 		}
 		
-		
-		//これ以降に遅くしてるやつがいる
-		// 犯人はmemcpy
-		build_start = clock();
 		cudaFree(detailed_nodes[root_median_id].x_sort_ids);
 		cudaFree(detailed_nodes[root_median_id].y_sort_ids);
 		cudaFree(detailed_nodes[root_median_id].z_sort_ids);
 
-
 		cudaMemcpy(&end_list[0], d_end_list, test_points.size() * sizeof(int), cudaMemcpyDeviceToHost);
 		cudaMemcpy(&detailed_nodes[0], d_detailed_nodes, test_points.size() * sizeof(detailed_node), cudaMemcpyDeviceToHost);
-		build_end = clock();
-
 		
-
-		
-
 		cudaFree(d_end_list);
 		cudaFree(d_detailed_nodes);
 		
@@ -1661,6 +1754,8 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 		// TreeOutCsv(detailed_nodes,0,root_median_id);
 		
 		// first=false;
+		build_end = clock();
+		printf("create tree time is %.5fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
 	}
 	// root_id=root_median_id;
 	//表示用スクリプト
@@ -1668,7 +1763,7 @@ extern void ComputeNormals(std::vector<long long int>& neighbor_time,std::vector
 	/////////////////////////////////////////////////////////////////////////////////////////施工
 	
 	
-	printf("create tree time is %.5fs\n",(double)(build_end-build_start)/CLOCKS_PER_SEC);
+	
 	//root_id表示
 	// std::cout << "root_id = " << root_id << std::endl;
 	//nodes表示
