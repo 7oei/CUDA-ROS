@@ -1,0 +1,39 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/adachi/ros1_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/adachi/ros1_ws/src/FootprintPlanner/FootprintPlanner/include/**",
+        "/home/adachi/ros1_ws/src/TerrainTraversabilityMapping/Azure_Kinect_ROS_Driver/include/**",
+        "/home/adachi/ros1_ws/src/bno055_usb_stick/include/**",
+        "/home/adachi/ros1_ws/src/cloud_copy/include/**",
+        "/home/adachi/ros1_ws/src/CUDA-ROS/cv_cuda/include/**",
+        "/home/adachi/ros1_ws/src/CUDA-ROS/eigen_cuda/include/**",
+        "/home/adachi/ros1_ws/src/FootprintPlanner/footprint_planner/include/**",
+        "/home/adachi/ros1_ws/src/CUDA-ROS/kdtree_cuda/include/**",
+        "/home/adachi/ros1_ws/src/SC-LeGO-LOAM/SC-LeGO-LOAM/LeGO-LOAM/include/**",
+        "/home/adachi/ros1_ws/src/TerrainTraversabilityMapping/mesh_divider/include/**",
+        "/home/adachi/ros1_ws/src/CUDA-ROS/min_cuda_node/include/**",
+        "/home/adachi/ros1_ws/src/TerrainTraversabilityMapping/normal_and_roughness_estimator/include/**",
+        "/home/adachi/ros1_ws/src/CUDA-ROS/normal_cuda/include/**",
+        "/home/adachi/ros1_ws/src/normal_estimator/include/**",
+        "/home/adachi/ros1_ws/src/CUDA-ROS/normals_cuda/include/**",
+        "/home/adachi/ros1_ws/src/TerrainTraversabilityMapping/organized_voxel_grid_filter/include/**",
+        "/home/adachi/ros1_ws/src/FootprintPlanner/path_planner/include/**",
+        "/home/adachi/ros1_ws/src/TerrainTraversabilityMapping/polygon_generator/include/**",
+        "/home/adachi/ros1_ws/src/PathFollower/pure_pursuit/include/**",
+        "/home/adachi/ros1_ws/src/roughness_estimator/include/**",
+        "/home/adachi/ros1_ws/src/TerrainTraversabilityMapping/traversability_evaluator/include/**",
+        "/home/adachi/ros1_ws/src/voxel_grid_filter/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}
